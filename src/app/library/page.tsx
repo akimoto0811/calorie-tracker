@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
-import { getNames, getReviewCount } from "@/lib/queries";
+import { amIAdmin, getNames, getReviewCount } from "@/lib/queries";
 import { fmt } from "@/lib/nutrition";
 import type { Food } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
@@ -31,13 +31,17 @@ export default async function Library({
   } else {
     query = query.eq("status", "approved");
   }
-  if (filter === "barcode") query = query.eq("source", "barcode");
+  if (filter === "barcode") query = query.not("barcode", "is", null);
   if (q) {
     const term = `*${q.replace(/[%_*,().]/g, " ").trim()}*`;
     query = query.or(`name.ilike.${term},brand.ilike.${term}`);
   }
 
-  const [{ data }, reviewCount] = await Promise.all([query, getReviewCount(supabase, user.id)]);
+  const [{ data }, reviewCount, admin] = await Promise.all([
+    query,
+    getReviewCount(supabase, user.id),
+    amIAdmin(supabase),
+  ]);
   const foods = (data ?? []) as Food[];
   const names = await getNames(supabase, foods.map((f) => f.created_by));
   const link = (f: FilterKey) => `/library?f=${f}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
@@ -134,13 +138,20 @@ export default async function Library({
                       </span>
                     )}
                   </div>
-                  {f.created_by === user.id && f.status !== "approved" && (
-                    <form action={deleteFood}>
-                      <input type="hidden" name="id" value={f.id} />
-                      <button className="link-btn danger" style={{ fontSize: 13 }}>
-                        {f.status === "pending" ? "Withdraw" : "Remove"}
-                      </button>
-                    </form>
+                  {(f.created_by === user.id || admin) && (
+                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                      <Link href={`/library/${f.id}/edit`} className="link-btn" style={{ fontSize: 13 }}>
+                        Edit
+                      </Link>
+                      {f.created_by === user.id && f.status !== "approved" && (
+                        <form action={deleteFood}>
+                          <input type="hidden" name="id" value={f.id} />
+                          <button className="link-btn danger" style={{ fontSize: 13 }}>
+                            {f.status === "pending" ? "Withdraw" : "Remove"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   )}
                 </div>
                 <Link href={`/add/food/${f.id}`} className="round-add" aria-label={`Log ${f.name}`}>

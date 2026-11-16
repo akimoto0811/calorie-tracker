@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createFood, createFoodAndLog } from "@/app/actions";
+import { createFood, createFoodAndLog, updateFood } from "@/app/actions";
 import { amountText, fmt } from "@/lib/nutrition";
 import {
   CORE_NUTRIENTS,
@@ -16,6 +16,7 @@ import {
   NUTRIENT_UNIT,
   SUB_NUTRIENTS,
   type FoodDraft,
+  type FoodStatus,
   type Meal,
   type NutrientKey,
 } from "@/lib/types";
@@ -23,6 +24,7 @@ import { Alert, Close, Plus } from "./icons";
 import { NutrientPicker } from "./NutrientPicker";
 import { AmountEaten, MealChips } from "./LogControls";
 import { ServingInput } from "./ServingInput";
+import { BarcodeField } from "./BarcodeField";
 
 type Field = NutrientKey | "name" | "brand" | "serving_label";
 
@@ -45,6 +47,7 @@ export function FoodForm({
   uncertain = [],
   defaultShare = true,
   allowShare = true,
+  edit,
 }: {
   initial: FoodDraft;
   meal: Meal;
@@ -53,12 +56,17 @@ export function FoodForm({
   uncertain?: string[];
   defaultShare?: boolean;
   allowShare?: boolean;
+  /** Editing a food already in the library, instead of adding a new one. */
+  edit?: { id: string; status: FoodStatus; admin: boolean; mine: boolean };
 }) {
   const router = useRouter();
   // A new, empty food starts with a sensible serving: 250 ml for drinks, 100 g otherwise.
   const [draft, setDraft] = useState<FoodDraft>(() =>
     initial.serving_label === "1 serving" && !initial.name
-      ? { ...initial, serving_label: initialMeal === "drinks" ? "250 ml" : "100 g" }
+      ? {
+          ...initial,
+          serving_label: initialMeal === "drinks" ? "250 ml" : "100 g",
+        }
       : initial,
   );
   const [meal, setMeal] = useState<Meal>(initialMeal);
@@ -80,7 +88,12 @@ export function FoodForm({
   );
   // Extra nutrients shown on the form: ones with a value (e.g. read from a label) or flagged.
   const [added, setAdded] = useState<Set<NutrientKey>>(
-    () => new Set(EXTRA_NUTRIENTS.filter((k) => NUTRIENT_INFO[k].kind === "extra" && (initial[k] !== null || uncertain.includes(k)))),
+    () =>
+      new Set(
+        EXTRA_NUTRIENTS.filter(
+          (k) => NUTRIENT_INFO[k].kind === "extra" && (initial[k] !== null || uncertain.includes(k)),
+        ),
+      ),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -109,6 +122,19 @@ export function FoodForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (edit) {
+      setDoing("save");
+      start(async () => {
+        const r = await updateFood({ id: edit.id, draft, share });
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        router.push(edit.mine ? "/library?f=mine" : "/library");
+        router.refresh();
+      });
+      return;
+    }
     setDoing("log");
     start(async () => {
       const r = await createFoodAndLog({ draft, share, servings, meal, date });
@@ -160,7 +186,12 @@ export function FoodForm({
           <span aria-hidden="true">{NUTRIENT_UNIT[key]}</span>
         </div>
         {NUTRIENT_INFO[key].kind === "extra" ? (
-          <button type="button" className="nf-remove" aria-label={`Remove ${NUTRIENT_NAME[key]}`} onClick={() => removeExtra(key)}>
+          <button
+            type="button"
+            className="nf-remove"
+            aria-label={`Remove ${NUTRIENT_NAME[key]}`}
+            onClick={() => removeExtra(key)}
+          >
             <Close size={16} />
           </button>
         ) : (
@@ -214,7 +245,7 @@ export function FoodForm({
 
   return (
     <form onSubmit={submit} className="stack" style={{ gap: 18 }}>
-      <MealChips value={meal} onChange={setMeal} />
+      {!edit && <MealChips value={meal} onChange={setMeal} />}
 
       <div className="grid2">
         <div className="span2">{input("name", { required: true, autoComplete: "off" })}</div>
@@ -225,6 +256,9 @@ export function FoodForm({
             onChange={(v) => set("serving_label", v)}
             flagged={flagged.has("serving_label")}
           />
+        </div>
+        <div className="span2">
+          <BarcodeField value={draft.barcode ?? ""} onChange={(v) => set("barcode", v || null)} />
         </div>
       </div>
 
@@ -245,20 +279,30 @@ export function FoodForm({
         {flaggedList.length > 0 && (
           <div
             id="uncertain-note"
-            style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, lineHeight: 1.4, color: "var(--warn-text)", marginTop: 10 }}
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+              fontSize: 13,
+              lineHeight: 1.4,
+              color: "var(--warn-text)",
+              marginTop: 10,
+            }}
           >
             <Alert size={16} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
-              {listify(flaggedList.map(plainName))} {flaggedList.length === 1 ? "was" : "were"} hard to read in
-              the photo. Please double-check {flaggedList.length === 1 ? "it" : "them"}.
+              {listify(flaggedList.map(plainName))} {flaggedList.length === 1 ? "was" : "were"} hard to read in the
+              photo. Please double-check {flaggedList.length === 1 ? "it" : "them"}.
             </span>
           </div>
         )}
       </div>
 
-      <AmountEaten servingLabel={draft.serving_label} kcal={draft.kcal} servings={servings} onChange={setServings} />
+      {!edit && (
+        <AmountEaten servingLabel={draft.serving_label} kcal={draft.kcal} servings={servings} onChange={setServings} />
+      )}
 
-      {allowShare && (
+      {allowShare && (!edit || edit.status === "private") && (
         <label className="share-box">
           <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} />
           <span className="stack" style={{ gap: 2 }}>
@@ -276,22 +320,48 @@ export function FoodForm({
         </div>
       )}
 
-      <button className="btn btn-primary" disabled={pending} style={{ height: 54 }}>
-        {pending && doing === "log" ? <span className="spinner" /> : `Add to ${MEAL_LABEL[meal]}`}
-      </button>
-      <div className="stack" style={{ gap: 6, marginTop: -6 }}>
-        <button type="button" className="btn btn-secondary" disabled={pending} style={{ height: 50 }} onClick={saveOnly}>
-          {pending && doing === "save" ? <span className="spinner" /> : "Save to library only"}
-        </button>
-        <p className="muted small" style={{ textAlign: "center" }}>
-          {share && allowShare
-            ? "Saves the food without logging it. A friend reviews it, then everyone can use it."
-            : "Saves the food to your own foods without logging it."}
-        </p>
-      </div>
+      {edit ? (
+        <div className="stack" style={{ gap: 6 }}>
+          <button className="btn btn-primary" disabled={pending} style={{ height: 54 }}>
+            {pending ? <span className="spinner" /> : "Save changes"}
+          </button>
+          <p className="muted small" style={{ textAlign: "center" }}>
+            {editNote(edit, share)}
+          </p>
+        </div>
+      ) : (
+        <>
+          <button className="btn btn-primary" disabled={pending} style={{ height: 54 }}>
+            {pending && doing === "log" ? <span className="spinner" /> : `Add to ${MEAL_LABEL[meal]}`}
+          </button>
+          <div className="stack" style={{ gap: 6, marginTop: -6 }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={pending}
+              style={{ height: 50 }}
+              onClick={saveOnly}
+            >
+              {pending && doing === "save" ? <span className="spinner" /> : "Save to library only"}
+            </button>
+            <p className="muted small" style={{ textAlign: "center" }}>
+              {share && allowShare
+                ? "Saves the food without logging it. A friend reviews it, then everyone can use it."
+                : "Saves the food to your own foods without logging it."}
+            </p>
+          </div>
+        </>
+      )}
       {pickerOpen && <NutrientPicker raw={raw} flagged={flagged} onChange={setNum} onClose={closePicker} />}
     </form>
   );
+}
+
+function editNote(edit: { status: FoodStatus; admin: boolean }, share: boolean) {
+  if (edit.status === "private" && !share) return "Only you can see this food.";
+  if (edit.status === "private") return "A friend reviews it, then everyone can use it.";
+  if (edit.admin) return "Your changes go live straight away.";
+  return "Your changes go back for review before others see them.";
 }
 
 function listify(items: string[]) {

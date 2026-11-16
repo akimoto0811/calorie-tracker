@@ -38,10 +38,19 @@ function snapshot(food: Pick<Food, "name" | "brand" | "serving_label"> & Record<
   };
 }
 
+/** Digits only; null when empty; false when it can't be a barcode. */
+function cleanBarcode(v: string | null | undefined): string | null | false {
+  const code = (v ?? "").replace(/\D/g, "");
+  if (!code) return null;
+  return /^\d{6,14}$/.test(code) ? code : false;
+}
+
 /** Turn the form's draft into a foods row, or explain what's missing. */
 function foodRow(userId: string, draft: FoodDraft, share: boolean) {
   const name = draft.name.trim();
   if (!name) return { ok: false as const, error: "Give the food a name." };
+  const barcode = cleanBarcode(draft.barcode);
+  if (barcode === false) return { ok: false as const, error: "A barcode has 6 to 14 digits." };
   return {
     ok: true as const,
     row: {
@@ -49,7 +58,7 @@ function foodRow(userId: string, draft: FoodDraft, share: boolean) {
       name: name.slice(0, 200),
       brand: draft.brand.trim() || null,
       serving_label: draft.serving_label.trim() || "1 serving",
-      barcode: draft.barcode?.trim() || null,
+      barcode,
       source: draft.source,
       label_photo_path:
         draft.label_photo_path && draft.label_photo_path.startsWith(userId + "/") ? draft.label_photo_path : null,
@@ -227,6 +236,29 @@ export async function reviewFood(input: {
     fixes,
     note: input.note ?? null,
   });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Edit a food in the library. You can edit foods you added; the app owner can edit any food.
+ * A friend's change to a shared food goes back for review.
+ */
+export async function updateFood(input: { id: string; draft: FoodDraft; share: boolean }): Promise<Result> {
+  const { supabase } = await requireUser();
+  const d = input.draft;
+  if (!d.name.trim()) return { ok: false, error: "Give the food a name." };
+  const barcode = cleanBarcode(d.barcode);
+  if (barcode === false) return { ok: false, error: "A barcode has 6 to 14 digits." };
+  const fields = {
+    name: d.name.trim().slice(0, 200),
+    brand: d.brand.trim(),
+    serving_label: d.serving_label.trim() || "1 serving",
+    barcode: barcode ?? "",
+    ...cleanNutrients(d),
+  };
+  const { error } = await supabase.rpc("update_food", { food_id: input.id, fields, share: input.share });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");
   return { ok: true };
