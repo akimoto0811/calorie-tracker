@@ -68,18 +68,28 @@ export class GeminiLabelReader implements LabelReader {
         }),
       });
 
+    // Busy (500/503) or retired (404) models: retry once, then move on to the next model.
+    const busy = (r: Response) => r.status === 500 || r.status === 503;
     let res!: Response;
     for (const model of this.models) {
-      res = await call(model, true);
-      // If Gemini rejects the request shape, ask again with plain JSON output.
-      if (res.status === 400) {
-        console.error(`Gemini ${model} rejected the schema, retrying without it:`, (await res.text().catch(() => "")).slice(0, 500));
-        res = await call(model, false);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        res = await call(model, true);
+        // If Gemini rejects the request shape, ask again with plain JSON output.
+        if (res.status === 400) {
+          console.error(`Gemini ${model} rejected the schema, retrying without it:`, (await res.text().catch(() => "")).slice(0, 500));
+          res = await call(model, false);
+        }
+        if (!busy(res)) break;
+        console.error(`Gemini model ${model} is busy (${res.status})${attempt === 0 ? ", retrying" : ""}.`);
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1000));
       }
-      if (res.status !== 404) break;
-      console.error(`Gemini model ${model} is not available (404), trying the next one.`);
+      if (res.status !== 404 && !busy(res)) break;
+      if (res.status === 404) console.error(`Gemini model ${model} is not available (404), trying the next one.`);
     }
 
+    if (busy(res)) {
+      throw new Error("Google's AI is overloaded right now. Try again in a minute, or enter the values by hand.");
+    }
     if (res.status === 429) {
       throw new Error("The free AI quota is used up for now. Try again in a minute, or enter the values by hand.");
     }
