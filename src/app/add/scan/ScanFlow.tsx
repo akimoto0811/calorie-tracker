@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FoodForm } from "@/components/FoodForm";
 import { emptyDraft, type FoodDraft, type Meal } from "@/lib/types";
 import { Alert } from "@/components/icons";
+import { useBarcodeCamera } from "@/components/useBarcodeCamera";
 
 type Phase =
   | { kind: "scanning" }
@@ -50,55 +51,7 @@ export function ScanFlow({ meal, date, today, qs }: { meal: Meal; date: string; 
     [qs, router],
   );
 
-  useEffect(() => {
-    if (phase.kind !== "scanning") return;
-    let stop: (() => void) | undefined;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.EAN_13,
-          BarcodeFormat.EAN_8,
-          BarcodeFormat.UPC_A,
-          BarcodeFormat.UPC_E,
-        ]);
-        const reader = new BrowserMultiFormatReader(hints);
-        if (cancelled || !videoRef.current) return;
-        const controls = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: "environment" } } },
-          videoRef.current,
-          (result) => {
-            if (result) {
-              controls.stop();
-              navigator.vibrate?.(50);
-              lookup(result.getText());
-            }
-          },
-        );
-        stop = () => controls.stop();
-        if (cancelled) stop();
-      } catch (e) {
-        if (cancelled) return;
-        const name = (e as Error)?.name;
-        setPhase({
-          kind: "error",
-          message:
-            name === "NotAllowedError"
-              ? "Camera access was blocked. Allow the camera for this site in your browser settings, or type the barcode below."
-              : "Couldn't start the camera on this device. You can type the barcode number below.",
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      stop?.();
-    };
-  }, [phase.kind, lookup]);
+  useBarcodeCamera(videoRef, phase.kind === "scanning", lookup, (message) => setPhase({ kind: "error", message }));
 
   if (phase.kind === "form") {
     return (

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
-import { getNames, signedPhotoUrl } from "@/lib/queries";
+import { amIAdmin, getNames, signedPhotoUrl } from "@/lib/queries";
 import type { Food } from "@/lib/types";
 import { ChevronLeft } from "@/components/icons";
 import { LogExisting } from "./LogExisting";
@@ -25,9 +25,11 @@ export default async function LogFoodPage({
   const { data } = await supabase.from("foods").select("*").eq("id", id).maybeSingle();
   if (!data) notFound();
   const food = data as Food;
-  const [names, photo] = await Promise.all([
+  const [names, photo, foodPhoto, admin] = await Promise.all([
     getNames(supabase, [food.created_by]),
     signedPhotoUrl(supabase, food.label_photo_path),
+    signedPhotoUrl(supabase, food.photo_path),
+    amIAdmin(supabase),
   ]);
   const by = food.created_by === user.id ? "you" : names[food.created_by] ?? "a friend";
 
@@ -39,6 +41,10 @@ export default async function LogFoodPage({
       </header>
 
       <article className="card">
+        {foodPhoto && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foodPhoto} alt={food.name} className="food-hero" />
+        )}
         <div style={{ display: "flex", gap: 14 }}>
           {photo && (
             <a href={photo} target="_blank" rel="noreferrer">
@@ -58,6 +64,11 @@ export default async function LogFoodPage({
               {food.status === "pending" && <span className="tag warn">Waiting for review</span>}
               {food.status === "private" && <span className="tag">Only you</span>}
             </div>
+            {(food.created_by === user.id || admin) && (
+              <Link href={`/library/${food.id}/edit`} className="link-btn" style={{ fontSize: 14, alignSelf: "flex-start" }}>
+                Edit food
+              </Link>
+            )}
           </div>
         </div>
         <NutritionTable values={food} />

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
-import { getNames, getReviewCount } from "@/lib/queries";
+import { amIAdmin, getNames, getReviewCount, signedPhotoUrls } from "@/lib/queries";
 import { fmt } from "@/lib/nutrition";
 import type { Food } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
@@ -31,15 +31,22 @@ export default async function Library({
   } else {
     query = query.eq("status", "approved");
   }
-  if (filter === "barcode") query = query.eq("source", "barcode");
+  if (filter === "barcode") query = query.not("barcode", "is", null);
   if (q) {
     const term = `*${q.replace(/[%_*,().]/g, " ").trim()}*`;
     query = query.or(`name.ilike.${term},brand.ilike.${term}`);
   }
 
-  const [{ data }, reviewCount] = await Promise.all([query, getReviewCount(supabase, user.id)]);
+  const [{ data }, reviewCount, admin] = await Promise.all([
+    query,
+    getReviewCount(supabase, user.id),
+    amIAdmin(supabase),
+  ]);
   const foods = (data ?? []) as Food[];
-  const names = await getNames(supabase, foods.map((f) => f.created_by));
+  const [names, photos] = await Promise.all([
+    getNames(supabase, foods.map((f) => f.created_by)),
+    signedPhotoUrls(supabase, foods.map((f) => f.photo_path)),
+  ]);
   const link = (f: FilterKey) => `/library?f=${f}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
   return (
@@ -117,6 +124,10 @@ export default async function Library({
           <div className="list">
             {foods.map((f) => (
               <div key={f.id} className="row">
+                {f.photo_path && photos[f.photo_path] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photos[f.photo_path]} alt="" className="food-thumb" />
+                )}
                 <div className="grow stack" style={{ gap: 4 }}>
                   <div style={{ fontWeight: 600 }}>{f.name}</div>
                   <div className="muted small">
@@ -134,13 +145,20 @@ export default async function Library({
                       </span>
                     )}
                   </div>
-                  {f.created_by === user.id && f.status !== "approved" && (
-                    <form action={deleteFood}>
-                      <input type="hidden" name="id" value={f.id} />
-                      <button className="link-btn danger" style={{ fontSize: 13 }}>
-                        {f.status === "pending" ? "Withdraw" : "Remove"}
-                      </button>
-                    </form>
+                  {(f.created_by === user.id || admin) && (
+                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                      <Link href={`/library/${f.id}/edit`} className="link-btn" style={{ fontSize: 13 }}>
+                        Edit
+                      </Link>
+                      {f.created_by === user.id && f.status !== "approved" && (
+                        <form action={deleteFood}>
+                          <input type="hidden" name="id" value={f.id} />
+                          <button className="link-btn danger" style={{ fontSize: 13 }}>
+                            {f.status === "pending" ? "Withdraw" : "Remove"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   )}
                 </div>
                 <Link href={`/add/food/${f.id}`} className="round-add" aria-label={`Log ${f.name}`}>

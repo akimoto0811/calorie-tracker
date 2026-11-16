@@ -123,6 +123,7 @@ export interface Food extends Nutrients {
   barcode: string | null;
   source: FoodSource;
   label_photo_path: string | null;
+  photo_path: string | null;
   status: FoodStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -177,6 +178,7 @@ export interface FoodDraft extends Nutrients {
   barcode: string | null;
   source: FoodSource;
   label_photo_path: string | null;
+  photo_path: string | null;
 }
 
 export function emptyDraft(source: FoodSource): FoodDraft {
@@ -187,6 +189,7 @@ export function emptyDraft(source: FoodSource): FoodDraft {
     barcode: null,
     source,
     label_photo_path: null,
+    photo_path: null,
     kcal: 0,
     protein_g: 0,
     carbs_g: 0,

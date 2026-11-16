@@ -118,6 +118,7 @@ create table if not exists public.foods (
   barcode text,
   source food_source not null default 'manual',
   label_photo_path text,
+  photo_path text,
   status food_status not null default 'private',
   reviewed_by uuid references auth.users (id) on delete set null,
   reviewed_at timestamptz,
@@ -127,6 +128,8 @@ create table if not exists public.foods (
 
 create index if not exists foods_status_idx on public.foods (status);
 create index if not exists foods_barcode_idx on public.foods (barcode);
+-- Added later: a picture of the food itself (separate from the label photo).
+alter table public.foods add column if not exists photo_path text;
 create index if not exists foods_created_by_idx on public.foods (created_by);
 
 -- ───────────────────────────── Food log ─────────────────────────────
@@ -498,11 +501,106 @@ $$;
 
 revoke all on function public.review_food(uuid, text, jsonb, text) from public, anon;
 grant execute on function public.review_food(uuid, text, jsonb, text) to authenticated;
+
+-- ───────────────────────────── Edit a food ─────────────────────────────
+-- You can edit your own foods; the app owner can edit any food.
+-- A friend's change to a shared food goes back for review before it's live again.
+-- The owner's changes apply straight away.
+create or replace function public.update_food(
+  food_id uuid,
+  fields jsonb,
+  share boolean default false
+)
+returns public.foods
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  f public.foods;
+  admin boolean;
+  k text;
+  v text;
+  code text;
+  next_status food_status;
+begin
+  if auth.uid() is null then
+    raise exception 'Not signed in';
+  end if;
+  admin := coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+
+  select * into f from public.foods where id = food_id for update;
+  if not found then
+    raise exception 'Food not found';
+  end if;
+  if f.created_by <> auth.uid() and not admin then
+    raise exception 'You can only edit foods you added';
+  end if;
+
+  code := nullif(regexp_replace(coalesce(fields ->> 'barcode', ''), '\D', '', 'g'), '');
+  if code is not null and code !~ '^\d{6,14}$' then
+    raise exception 'A barcode has 6 to 14 digits';
+  end if;
+
+  update public.foods set
+    name = coalesce(nullif(left(trim(fields ->> 'name'), 200), ''), name),
+    brand = case when fields ? 'brand' then nullif(trim(fields ->> 'brand'), '') else brand end,
+    serving_label = coalesce(nullif(trim(fields ->> 'serving_label'), ''), serving_label),
+    barcode = case when fields ? 'barcode' then code else barcode end,
+    -- A new food photo must be one you uploaded (it sits in your own folder).
+    photo_path = case
+      when not fields ? 'photo_path' then photo_path
+      when nullif(fields ->> 'photo_path', '') is null then null
+      when fields ->> 'photo_path' = f.photo_path then photo_path
+      when (fields ->> 'photo_path') like auth.uid()::text || '/%' then fields ->> 'photo_path'
+      else photo_path
+    end
+  where id = food_id;
+
+  -- Nutrients: any numeric nutrient column. Calories and macros can't be emptied.
+  for k, v in select key, value from jsonb_each_text(fields) loop
+    if (k = 'kcal' or k ~ '^[a-z0-9_]+_(g|mg|mcg)$')
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'foods' and column_name = k and data_type = 'numeric'
+      )
+    then
+      if v is null and k in ('kcal', 'protein_g', 'carbs_g', 'fat_g') then
+        v := '0';
+      end if;
+      execute format('update public.foods set %I = $1 where id = $2', k) using v::numeric, food_id;
+    end if;
+  end loop;
+
+  if admin then
+    -- The owner's edits go live as they are; a private food can still be shared.
+    next_status := case when f.status = 'private' and share then 'pending'::food_status else f.status end;
+  elsif f.status = 'private' and not share then
+    next_status := 'private';
+  else
+    next_status := 'pending';
+  end if;
+
+  update public.foods set
+    status = next_status,
+    reviewed_by = case when next_status = 'pending' then null else reviewed_by end,
+    reviewed_at = case when next_status = 'pending' then null else reviewed_at end,
+    review_note = case when next_status = 'pending' then null else review_note end
+  where id = food_id
+  returning * into f;
+
+  return f;
+end;
+$$;
+
+revoke all on function public.update_food(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.update_food(uuid, jsonb, boolean) to authenticated;
 revoke all on function public.my_profile() from public, anon;
 grant execute on function public.my_profile() to authenticated;
 
--- ───────────────────────────── Label photo storage ─────────────────────────────
--- Private bucket. Photos go in a folder named after the uploader's user id.
+-- ───────────────────────────── Photo storage ─────────────────────────────
+-- Private bucket for label photos and food photos.
+-- Photos go in a folder named after the uploader's user id.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('label-photos', 'label-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { shrink } from "@/lib/image";
 import { createClient } from "@/lib/supabase/client";
 import { FoodForm } from "@/components/FoodForm";
 import { EXTRA_NUTRIENTS, emptyDraft, type FoodDraft, type Meal } from "@/lib/types";
@@ -14,17 +15,6 @@ type Phase =
   | { kind: "error"; preview: string | null; message: string; path: string | null };
 
 /** Shrinks a photo to at most 1600 px on the long side, as JPEG, so uploads are quick. */
-async function shrink(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) return file;
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob((b) => resolve(b ?? file), "image/jpeg", 0.85));
-}
-
 export function LabelFlow({ userId, meal, date, today }: { userId: string; meal: Meal; date: string; today: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
