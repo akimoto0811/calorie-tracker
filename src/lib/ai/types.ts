@@ -29,7 +29,8 @@ Return the nutrition values for ONE SERVING as printed on the label.
 - Vitamin D: if only IU is shown, mcg = IU ÷ 40. Vitamin A in mcg RAE. Folate in mcg DFE.
 - If a nutrient only shows a % Daily Value, convert it with these US daily values (and list it in "uncertain"):
   ${NUTRIENTS.filter((n) => "dv" in n).map((n) => `${n.key} ${(n as { dv: number }).dv}`).join(", ")}.
-- Use null for anything not on the label. Never guess a number you cannot see.
+- Return the values in "nutrients" as a list of { "field": <a nutrient field name from the list below>, "value": <number> }, one entry per value on the label.
+  Leave out anything not on the label. Never guess a number you cannot see.
 - Put the field name in "uncertain" for every value that is blurry, cut off, ambiguous, or that you computed/converted.
   Allowed field names: name, brand, serving_label, ${NUTRIENT_KEYS.join(", ")}.
 - name / brand: read them from the packaging if visible, otherwise null.
