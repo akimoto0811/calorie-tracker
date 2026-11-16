@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
-import { amIAdmin, getNames, getReviewCount } from "@/lib/queries";
+import { amIAdmin, getNames, getReviewCount, signedPhotoUrls } from "@/lib/queries";
 import { fmt } from "@/lib/nutrition";
 import type { Food } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
@@ -43,7 +43,10 @@ export default async function Library({
     amIAdmin(supabase),
   ]);
   const foods = (data ?? []) as Food[];
-  const names = await getNames(supabase, foods.map((f) => f.created_by));
+  const [names, photos] = await Promise.all([
+    getNames(supabase, foods.map((f) => f.created_by)),
+    signedPhotoUrls(supabase, foods.map((f) => f.photo_path)),
+  ]);
   const link = (f: FilterKey) => `/library?f=${f}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
   return (
@@ -121,6 +124,10 @@ export default async function Library({
           <div className="list">
             {foods.map((f) => (
               <div key={f.id} className="row">
+                {f.photo_path && photos[f.photo_path] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photos[f.photo_path]} alt="" className="food-thumb" />
+                )}
                 <div className="grow stack" style={{ gap: 4 }}>
                   <div style={{ fontWeight: 600 }}>{f.name}</div>
                   <div className="muted small">

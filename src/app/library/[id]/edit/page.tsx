@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { BackButton } from "@/components/BackButton";
 import { FoodForm } from "@/components/FoodForm";
 import { requireUser } from "@/lib/supabase/server";
-import { amIAdmin } from "@/lib/queries";
+import { amIAdmin, signedPhotoUrl } from "@/lib/queries";
 import { localNow, today } from "@/lib/dates";
 import { defaultMeal } from "@/lib/nutrition";
 import { NUTRIENT_KEYS, type Food, type FoodDraft } from "@/lib/types";
@@ -20,6 +20,7 @@ export default async function EditFood({ params }: { params: Promise<{ id: strin
   const food = data as Food;
   const mine = food.created_by === user.id;
   if (!mine && !admin) notFound();
+  const photoUrl = await signedPhotoUrl(supabase, food.photo_path);
 
   const initial = {
     name: food.name,
@@ -28,6 +29,7 @@ export default async function EditFood({ params }: { params: Promise<{ id: strin
     barcode: food.barcode,
     source: food.source,
     label_photo_path: food.label_photo_path,
+    photo_path: food.photo_path,
     ...Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, food[k] === null || food[k] === undefined ? null : Number(food[k])])),
   } as FoodDraft;
 
@@ -47,6 +49,7 @@ export default async function EditFood({ params }: { params: Promise<{ id: strin
         today={todayStr}
         defaultShare={false}
         edit={{ id: food.id, status: food.status, admin, mine }}
+        photoUrl={photoUrl}
       />
     </main>
   );

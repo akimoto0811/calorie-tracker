@@ -118,6 +118,7 @@ create table if not exists public.foods (
   barcode text,
   source food_source not null default 'manual',
   label_photo_path text,
+  photo_path text,
   status food_status not null default 'private',
   reviewed_by uuid references auth.users (id) on delete set null,
   reviewed_at timestamptz,
@@ -127,6 +128,8 @@ create table if not exists public.foods (
 
 create index if not exists foods_status_idx on public.foods (status);
 create index if not exists foods_barcode_idx on public.foods (barcode);
+-- Added later: a picture of the food itself (separate from the label photo).
+alter table public.foods add column if not exists photo_path text;
 create index if not exists foods_created_by_idx on public.foods (created_by);
 
 -- ───────────────────────────── Food log ─────────────────────────────
@@ -543,7 +546,15 @@ begin
     name = coalesce(nullif(left(trim(fields ->> 'name'), 200), ''), name),
     brand = case when fields ? 'brand' then nullif(trim(fields ->> 'brand'), '') else brand end,
     serving_label = coalesce(nullif(trim(fields ->> 'serving_label'), ''), serving_label),
-    barcode = case when fields ? 'barcode' then code else barcode end
+    barcode = case when fields ? 'barcode' then code else barcode end,
+    -- A new food photo must be one you uploaded (it sits in your own folder).
+    photo_path = case
+      when not fields ? 'photo_path' then photo_path
+      when nullif(fields ->> 'photo_path', '') is null then null
+      when fields ->> 'photo_path' = f.photo_path then photo_path
+      when (fields ->> 'photo_path') like auth.uid()::text || '/%' then fields ->> 'photo_path'
+      else photo_path
+    end
   where id = food_id;
 
   -- Nutrients: any numeric nutrient column. Calories and macros can't be emptied.
@@ -587,8 +598,9 @@ grant execute on function public.update_food(uuid, jsonb, boolean) to authentica
 revoke all on function public.my_profile() from public, anon;
 grant execute on function public.my_profile() to authenticated;
 
--- ───────────────────────────── Label photo storage ─────────────────────────────
--- Private bucket. Photos go in a folder named after the uploader's user id.
+-- ───────────────────────────── Photo storage ─────────────────────────────
+-- Private bucket for label photos and food photos.
+-- Photos go in a folder named after the uploader's user id.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('label-photos', 'label-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;

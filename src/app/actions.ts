@@ -62,6 +62,7 @@ function foodRow(userId: string, draft: FoodDraft, share: boolean) {
       source: draft.source,
       label_photo_path:
         draft.label_photo_path && draft.label_photo_path.startsWith(userId + "/") ? draft.label_photo_path : null,
+      photo_path: draft.photo_path && draft.photo_path.startsWith(userId + "/") ? draft.photo_path : null,
       status: share ? ("pending" as const) : ("private" as const),
       ...cleanNutrients(draft),
     },
@@ -256,6 +257,7 @@ export async function updateFood(input: { id: string; draft: FoodDraft; share: b
     brand: d.brand.trim(),
     serving_label: d.serving_label.trim() || "1 serving",
     barcode: barcode ?? "",
+    photo_path: d.photo_path ?? "",
     ...cleanNutrients(d),
   };
   const { error } = await supabase.rpc("update_food", { food_id: input.id, fields, share: input.share });

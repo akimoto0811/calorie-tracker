@@ -25,9 +25,10 @@ export default async function LogFoodPage({
   const { data } = await supabase.from("foods").select("*").eq("id", id).maybeSingle();
   if (!data) notFound();
   const food = data as Food;
-  const [names, photo, admin] = await Promise.all([
+  const [names, photo, foodPhoto, admin] = await Promise.all([
     getNames(supabase, [food.created_by]),
     signedPhotoUrl(supabase, food.label_photo_path),
+    signedPhotoUrl(supabase, food.photo_path),
     amIAdmin(supabase),
   ]);
   const by = food.created_by === user.id ? "you" : names[food.created_by] ?? "a friend";
@@ -40,6 +41,10 @@ export default async function LogFoodPage({
       </header>
 
       <article className="card">
+        {foodPhoto && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foodPhoto} alt={food.name} className="food-hero" />
+        )}
         <div style={{ display: "flex", gap: 14 }}>
           {photo && (
             <a href={photo} target="_blank" rel="noreferrer">

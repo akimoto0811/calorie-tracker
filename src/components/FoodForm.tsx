@@ -25,6 +25,7 @@ import { NutrientPicker } from "./NutrientPicker";
 import { AmountEaten, MealChips } from "./LogControls";
 import { ServingInput } from "./ServingInput";
 import { BarcodeField } from "./BarcodeField";
+import { FoodPhotoField } from "./FoodPhotoField";
 
 type Field = NutrientKey | "name" | "brand" | "serving_label";
 
@@ -48,6 +49,7 @@ export function FoodForm({
   defaultShare = true,
   allowShare = true,
   edit,
+  photoUrl = null,
 }: {
   initial: FoodDraft;
   meal: Meal;
@@ -58,6 +60,8 @@ export function FoodForm({
   allowShare?: boolean;
   /** Editing a food already in the library, instead of adding a new one. */
   edit?: { id: string; status: FoodStatus; admin: boolean; mine: boolean };
+  /** Signed URL of the food's current photo, when editing. */
+  photoUrl?: string | null;
 }) {
   const router = useRouter();
   // A new, empty food starts with a sensible serving: 250 ml for drinks, 100 g otherwise.
@@ -248,6 +252,9 @@ export function FoodForm({
       {!edit && <MealChips value={meal} onChange={setMeal} />}
 
       <div className="grid2">
+        <div className="span2">
+          <FoodPhotoField initialUrl={photoUrl} onChange={(path) => set("photo_path", path)} />
+        </div>
         <div className="span2">{input("name", { required: true, autoComplete: "off" })}</div>
         <div className="span2">{input("brand", { placeholder: "Optional", autoComplete: "off" })}</div>
         <div className="span2">

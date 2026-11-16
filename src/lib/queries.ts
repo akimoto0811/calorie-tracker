@@ -56,3 +56,14 @@ export async function signedPhotoUrl(
   const { data } = await supabase.storage.from("label-photos").createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
+
+/** Signed URLs for many photos at once: path → URL. */
+export async function signedPhotoUrls(
+  supabase: SupabaseClient,
+  paths: (string | null | undefined)[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(paths)].filter((p): p is string => !!p);
+  if (unique.length === 0) return {};
+  const { data } = await supabase.storage.from("label-photos").createSignedUrls(unique, 60 * 60);
+  return Object.fromEntries((data ?? []).filter((d) => d.signedUrl && d.path).map((d) => [d.path!, d.signedUrl as string]));
+}
