@@ -129,7 +129,10 @@ export default async function Library({
                   <img src={photos[f.photo_path]} alt="" className="food-thumb" />
                 )}
                 <div className="grow stack" style={{ gap: 4 }}>
-                  <div style={{ fontWeight: 600 }}>{f.name}</div>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{f.name}</div>
+                    {f.brand && <div className="muted small">{f.brand}</div>}
+                  </div>
                   <div className="muted small">
                     {fmt(f.kcal)} kcal · {f.serving_label} · P {fmt(f.protein_g, 1)} C {fmt(f.carbs_g, 1)} F{" "}
                     {fmt(f.fat_g, 1)}
