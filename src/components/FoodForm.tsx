@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { Alert } from "./icons";
 import { MealChips, ServingsStepper } from "./LogControls";
+import { ServingInput } from "./ServingInput";
 
 type Field = NutrientKey | "name" | "brand" | "serving_label";
 
@@ -48,7 +49,12 @@ export function FoodForm({
   allowShare?: boolean;
 }) {
   const router = useRouter();
-  const [draft, setDraft] = useState<FoodDraft>(initial);
+  // A new, empty food starts with a sensible serving: 250 ml for drinks, 100 g otherwise.
+  const [draft, setDraft] = useState<FoodDraft>(() =>
+    initial.serving_label === "1 serving" && !initial.name
+      ? { ...initial, serving_label: initialMeal === "drinks" ? "250 ml" : "100 g" }
+      : initial,
+  );
   const [meal, setMeal] = useState<Meal>(initialMeal);
   const [servings, setServings] = useState(1);
   const [share, setShare] = useState(allowShare && defaultShare);
@@ -128,12 +134,18 @@ export function FoodForm({
 
       <div className="grid2">
         <div className="span2">{input("name", { required: true, autoComplete: "off" })}</div>
-        {input("brand", { placeholder: "Optional", autoComplete: "off" })}
-        {input("serving_label", { placeholder: "e.g. 250 ml", autoComplete: "off" })}
+        <div className="span2">{input("brand", { placeholder: "Optional", autoComplete: "off" })}</div>
+        <div className="span2">
+          <ServingInput
+            value={draft.serving_label}
+            onChange={(v) => set("serving_label", v)}
+            flagged={flagged.has("serving_label")}
+          />
+        </div>
       </div>
 
       <div className="card" style={{ padding: 16, gap: 12, borderRadius: 16 }}>
-        <div style={{ fontWeight: 700 }}>Per serving</div>
+        <div style={{ fontWeight: 700 }}>Per serving ({draft.serving_label})</div>
         <div className="grid2">{CORE_NUTRIENTS.map((k) => <div key={k}>{input(k)}</div>)}</div>
         {showExtras && (
           <div className="grid2">{EXTRA_NUTRIENTS.map((k) => <div key={k}>{input(k, { placeholder: "–" })}</div>)}</div>
@@ -161,7 +173,7 @@ export function FoodForm({
         <div>
           <div style={{ fontWeight: 700 }}>How much did you have?</div>
           <div className="muted small">
-            {fmt(servings, 2)} × {draft.serving_label || "serving"} = {fmt(draft.kcal * servings)} kcal
+            {fmt(servings, 2)} × {draft.serving_label} = {fmt(draft.kcal * servings)} kcal
           </div>
         </div>
         <ServingsStepper value={servings} onChange={setServings} />
