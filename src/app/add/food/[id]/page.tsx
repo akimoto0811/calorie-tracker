@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
@@ -33,9 +34,7 @@ export default async function LogFoodPage({
   return (
     <main className="page no-nav">
       <header className="topbar">
-        <Link href={`/add?${qs}`} className="icon-btn" aria-label="Back">
-          <ChevronLeft />
-        </Link>
+        <BackButton fallback={`/add?${qs}`} />
         <h1 style={{ fontSize: 24 }}>Add food</h1>
       </header>
 

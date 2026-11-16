@@ -16,6 +16,7 @@ const ROWS = [
   { key: "protein_goal", label: "Protein", unit: "g", color: "var(--protein)" },
   { key: "carbs_goal", label: "Carbs", unit: "g", color: "var(--carbs)" },
   { key: "fat_goal", label: "Fat", unit: "g", color: "var(--fat)" },
+  { key: "water_goal_ml", label: "Water", unit: "ml", color: "var(--water)" },
 ] as const;
 
 export function GoalsForm({ profile }: { profile: Profile }) {
@@ -26,6 +27,7 @@ export function GoalsForm({ profile }: { profile: Profile }) {
     protein_goal: String(profile.protein_goal),
     carbs_goal: String(profile.carbs_goal),
     fat_goal: String(profile.fat_goal),
+    water_goal_ml: String(profile.water_goal_ml ?? 2000),
   });
   const n = (s: string) => Number(s.replace(",", ".")) || 0;
   const fromMacros = macroKcal(n(vals.protein_goal), n(vals.carbs_goal), n(vals.fat_goal));
@@ -34,13 +36,6 @@ export function GoalsForm({ profile }: { profile: Profile }) {
   return (
     <form action={action} className="card">
       <h2 style={{ fontFamily: "var(--font)", fontSize: 16 }}>Daily goals</h2>
-
-      <div className="field">
-        <label htmlFor="display_name" className="label">
-          Name friends see
-        </label>
-        <input id="display_name" name="display_name" className="input" defaultValue={profile.display_name} maxLength={60} />
-      </div>
 
       <input type="hidden" name="goal_mode" value={mode} />
       <div className="seg" role="radiogroup" aria-label="Goal">

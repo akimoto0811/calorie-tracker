@@ -6,6 +6,7 @@ import { fmt, sum } from "@/lib/nutrition";
 import { MEALS, MEAL_LABEL, type LogEntry } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { CalorieRing, MacroBars } from "@/components/Progress";
+import { WaterCard } from "@/components/WaterCard";
 import { ChevronLeft, ChevronRight, Plus, Trash } from "@/components/icons";
 import { deleteLog } from "./actions";
 
@@ -19,7 +20,7 @@ export default async function Dashboard({
   const sp = await searchParams;
   const date = sp.date && DATE_RE.test(sp.date) ? sp.date : todayStr;
 
-  const [profile, reviewCount, logsRes] = await Promise.all([
+  const [profile, reviewCount, logsRes, waterRes] = await Promise.all([
     getMyProfile(supabase, user.id),
     getReviewCount(supabase, user.id),
     supabase
@@ -27,7 +28,10 @@ export default async function Dashboard({
       .select("*")
       .eq("logged_on", date)
       .order("created_at", { ascending: true }),
+    supabase.from("water_logs").select("ml").eq("logged_on", date),
   ]);
+  const water = (waterRes.data ?? []) as { ml: number }[];
+  const waterTotal = water.reduce((s, w) => s + Number(w.ml), 0);
   const logs = (logsRes.data ?? []) as LogEntry[];
   const totals = sum(logs);
 
@@ -88,6 +92,8 @@ export default async function Dashboard({
             goals={{ protein: profile.protein_goal, carbs: profile.carbs_goal, fat: profile.fat_goal }}
           />
         </section>
+
+        <WaterCard total={waterTotal} goal={profile.water_goal_ml ?? 2000} date={date} entries={water.length} />
 
         <section className="stack">
           <h2>Meals</h2>

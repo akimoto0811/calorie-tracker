@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { TimezoneCookie } from "@/components/TimezoneCookie";
+import { NavTracker } from "@/components/BackButton";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${grotesk.variable}`}>
       <body>
         <TimezoneCookie />
+        <NavTracker />
         {children}
       </body>
     </html>

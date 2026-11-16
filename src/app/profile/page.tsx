@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { ChevronRight, Lock } from "@/components/icons";
 import { GoalsForm } from "./GoalsForm";
 import { InviteForm } from "./InviteForm";
+import { NameEditor } from "./NameEditor";
 
 export default async function ProfilePage() {
   const { supabase, user } = await requireUser();
@@ -43,8 +44,8 @@ export default async function ProfilePage() {
           >
             {name.charAt(0).toUpperCase()}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <h1 style={{ fontSize: 22 }}>{name}</h1>
+          <div style={{ minWidth: 0, flexGrow: 1 }}>
+            <NameEditor name={name} />
             <div className="muted small" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
               Signed in with {provider}
               {user.email ? ` · ${user.email}` : ""}

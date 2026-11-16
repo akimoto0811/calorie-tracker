@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { getNames, signedPhotoUrl } from "@/lib/queries";
@@ -55,9 +56,7 @@ export default async function ReviewQueue() {
   return (
     <main className="page no-nav" style={{ gap: 16 }}>
       <header className="topbar">
-        <Link href="/library" className="icon-btn" aria-label="Back">
-          <ChevronLeft />
-        </Link>
+        <BackButton fallback="/library" />
         <div className="grow">
           <h1 style={{ fontSize: 24 }}>Review</h1>
           <div className="muted small">

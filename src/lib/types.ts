@@ -1,10 +1,11 @@
-export type Meal = "breakfast" | "lunch" | "dinner" | "snacks";
-export const MEALS: Meal[] = ["breakfast", "lunch", "dinner", "snacks"];
+export type Meal = "breakfast" | "lunch" | "dinner" | "snacks" | "drinks";
+export const MEALS: Meal[] = ["breakfast", "lunch", "dinner", "snacks", "drinks"];
 export const MEAL_LABEL: Record<Meal, string> = {
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
   snacks: "Snacks",
+  drinks: "Drinks",
 };
 
 export type FoodSource = "manual" | "label" | "barcode";
@@ -84,6 +85,7 @@ export interface Profile {
   protein_goal: number;
   carbs_goal: number;
   fat_goal: number;
+  water_goal_ml: number;
 }
 
 /** What the food form edits, before it becomes a Food row. */
