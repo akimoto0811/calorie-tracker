@@ -65,6 +65,26 @@ export function num(v: FormDataEntryValue | null | undefined): number | null {
 }
 
 /**
+ * Just the total you had, for compact lists: "33 g", "600 ml", "1.2 L".
+ * Falls back to "1.5 × 1 bar (40 g)" when the serving isn't a simple amount and unit.
+ */
+export function eatenText(servingLabel: string, servings: number): string {
+  const m = servingLabel.trim().match(/^(\d+(?:[.,]\d+)?)\s*([^\d()]+)$/);
+  if (!m) return servings === 1 ? servingLabel : `${fmt(servings, 2)} × ${servingLabel}`;
+  const total = Number(m[1].replace(",", ".")) * servings;
+  const unit = m[2].trim();
+  if (unit === "ml" && total >= 1000) return `${fmt(total / 1000, 2)} L`;
+  if (unit === "g" && total >= 1000) return `${fmt(total / 1000, 2)} kg`;
+  return `${fmt(total, 1)} ${unit}`;
+}
+
+/** Splits "KOREPAB Snacks (ORION)" into the food name and its brand. */
+export function splitBrand(name: string): { name: string; brand: string | null } {
+  const m = name.match(/^(.+?)\s*\(([^()]+)\)$/);
+  return m ? { name: m[1], brand: m[2] } : { name, brand: null };
+}
+
+/**
  * Describes how much you had: "250 ml" for one serving, "3 × 250 ml = 750 ml" for several.
  * Falls back to "3 × 1 bar (40 g)" when the serving isn't a simple amount and unit.
  */

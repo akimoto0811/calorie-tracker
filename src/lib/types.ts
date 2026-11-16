@@ -157,6 +157,8 @@ export interface Profile {
   height_cm: number | null;
   weight_kg: number | null;
   activity: Activity | null;
+  /** App owner: can approve any shared food, including their own. */
+  is_admin?: boolean;
 }
 
 export type Activity = "little" | "light" | "moderate" | "very";

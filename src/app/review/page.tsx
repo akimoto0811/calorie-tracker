@@ -1,7 +1,7 @@
 import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
-import { getNames, signedPhotoUrl } from "@/lib/queries";
+import { amIAdmin, getNames, signedPhotoUrl } from "@/lib/queries";
 import type { Food } from "@/lib/types";
 import { ChevronLeft } from "@/components/icons";
 import { ReviewCard } from "./ReviewCard";
@@ -16,11 +16,10 @@ function ago(iso: string) {
 
 export default async function ReviewQueue() {
   const { supabase, user } = await requireUser();
-  const { data } = await supabase
-    .from("foods")
-    .select("*")
-    .eq("status", "pending")
-    .neq("created_by", user.id)
+  const admin = await amIAdmin(supabase);
+  let pending = supabase.from("foods").select("*").eq("status", "pending");
+  if (!admin) pending = pending.neq("created_by", user.id);
+  const { data } = await pending
     .order("created_at", { ascending: true })
     .limit(50);
   const queue = (data ?? []) as Food[];
@@ -48,7 +47,7 @@ export default async function ReviewQueue() {
             .ilike("name", `%${word.replace(/[%_]/g, "")}%`)
             .limit(1),
     ]);
-    by = names[food.created_by] ?? "a friend";
+    by = food.created_by === user.id ? "you" : names[food.created_by] ?? "a friend";
     photo = url;
     similar = sim.data?.[0]?.name ?? null;
   }
