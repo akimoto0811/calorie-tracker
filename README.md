@@ -55,11 +55,29 @@ In Supabase, go to **Authentication → URL Configuration**:
 1. Set **Site URL** to your Vercel address, e.g. `https://calorie-tracker-abc.vercel.app`
 2. Under **Redirect URLs** click **Add URL** and add `https://calorie-tracker-abc.vercel.app/**` (your address followed by `/**`). Save.
 
-### 5. Make email sign-in links work on any device (recommended)
+### 5. Optional: better email sign-in (you can skip this)
 
-By default an emailed sign-in link only works in the same browser you requested it from. To make it work everywhere (e.g. request on your laptop, open on your phone):
+**You can skip this step and come back later.** Email sign-in already works without it, with two limits:
 
-1. In Supabase go to **Authentication → Emails** (called **Email Templates** on some projects) and open **Magic Link**.
+- The emailed link only works in the **same browser** you requested it from (request it on your phone, open it on your phone).
+- Supabase's built-in sender only sends **a few emails per hour**, so if several friends sign in by email at once, some links won't arrive.
+
+The easy way around both is for everyone to use **Continue with Google** (step 6). If you'd still like email sign-in to work on any device and for many people, do these two parts.
+
+**Part A: connect your own email sender.** New free Supabase projects only let you edit the email templates after you do this. [Brevo](https://www.brevo.com) is free (300 emails a day) and doesn't need your own domain:
+
+1. Sign up at Brevo. Under **Senders, Domains & Dedicated IPs → Senders**, add and verify the email address you want sign-in emails to come from.
+2. Under **SMTP & API → SMTP**, click **Generate a new SMTP key** and copy it. Note the **Login** shown on that page too.
+3. In Supabase go to **Authentication → Emails → SMTP Settings** (on some projects: **Project Settings → Authentication**), switch on **Enable custom SMTP**, and fill in:
+   - Sender email: the address you verified in Brevo
+   - Sender name: `Calorie Tracker`
+   - Host: `smtp-relay.brevo.com`, Port: `587`
+   - Username: the Brevo **Login**; Password: the SMTP key
+4. Save. Then under **Authentication → Rate Limits**, raise **emails sent per hour** to something like 30.
+
+**Part B: change the sign-in email.**
+
+1. In Supabase go to **Authentication → Emails → Templates** and open **Magic Link**.
 2. Replace the whole message body with:
 
    ```html
@@ -68,8 +86,6 @@ By default an emailed sign-in link only works in the same browser you requested 
    ```
 
 3. Save. Then open the **Confirm signup** template (new users get that one the first time they sign in by email) and paste the exact same body there too.
-
-> **Heads-up about email limits:** Supabase's built-in email sender only sends a few emails per hour on the free plan. That's fine for testing, but if several friends sign in by email at once some links won't arrive. Either ask friends to use **Continue with Google**, or connect a free email sender like [Resend](https://resend.com) under **Project Settings → Authentication → SMTP Settings**.
 
 ### 6. Turn on "Continue with Google"
 
