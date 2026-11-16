@@ -12,6 +12,7 @@ const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
     name: STR,
+    local_name: STR,
     brand: STR,
     serving_label: STR,
     nutrients: {
@@ -137,6 +138,7 @@ export class GeminiLabelReader implements LabelReader {
 
     return {
       name: s("name"),
+      local_name: s("local_name"),
       brand: s("brand"),
       serving_label: s("serving_label"),
       values: Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, fromList.get(k) ?? n(k)])),

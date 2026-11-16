@@ -34,6 +34,7 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
         ...emptyDraft("label"),
         label_photo_path: path,
         name: reading.name ?? "",
+        local_name: reading.local_name ?? "",
         brand: reading.brand ?? "",
         serving_label: reading.serving_label ?? "1 serving",
         kcal: reading.values.kcal ?? 0,

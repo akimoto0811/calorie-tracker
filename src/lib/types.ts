@@ -124,6 +124,8 @@ export interface Food extends Nutrients {
   source: FoodSource;
   label_photo_path: string | null;
   photo_path: string | null;
+  /** Name in the original language, shown under the English name. */
+  local_name: string | null;
   status: FoodStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -179,6 +181,8 @@ export interface FoodDraft extends Nutrients {
   source: FoodSource;
   label_photo_path: string | null;
   photo_path: string | null;
+  /** Name in the original language, shown under the English name. */
+  local_name: string;
 }
 
 export function emptyDraft(source: FoodSource): FoodDraft {
@@ -190,6 +194,7 @@ export function emptyDraft(source: FoodSource): FoodDraft {
     source,
     label_photo_path: null,
     photo_path: null,
+    local_name: "",
     kcal: 0,
     protein_g: 0,
     carbs_g: 0,
