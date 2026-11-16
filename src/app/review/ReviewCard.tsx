@@ -4,7 +4,7 @@ import { NutritionTable } from "@/components/NutritionTable";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { reviewFood } from "@/app/actions";
-import { NUTRIENT_KEYS, NUTRIENT_LABEL, type Food, type NutrientKey } from "@/lib/types";
+import { FORM_NUTRIENTS, NUTRIENT_KEYS, NUTRIENT_LABEL, type Food, type NutrientKey } from "@/lib/types";
 import { Alert, Check } from "@/components/icons";
 
 const SOURCE_LABEL = { manual: "Entered by hand", label: "Read from label photo", barcode: "From barcode" } as const;
@@ -102,7 +102,7 @@ export function ReviewCard({
                 />
               </div>
             ))}
-            {NUTRIENT_KEYS.map((k) => (
+            {NUTRIENT_KEYS.filter((k) => FORM_NUTRIENTS.includes(k) || food[k] !== null).map((k) => (
               <div key={k} className="field">
                 <label htmlFor={`r-${k}`} className="label">
                   {NUTRIENT_LABEL[k]}

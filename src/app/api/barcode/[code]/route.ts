@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { emptyDraft, type FoodDraft } from "@/lib/types";
+import { NUTRIENTS, emptyDraft, type FoodDraft, type NutrientKey } from "@/lib/types";
 
 /**
  * Looks up a barcode. First checks our own library (approved foods, or your own),
@@ -60,43 +60,36 @@ function fromOpenFoodFacts(code: string, p: OffProduct): FoodDraft & { per: "ser
     const x = typeof v === "string" ? Number(v) : v;
     return typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null;
   };
-  const get = (key: string): number | null => {
-    const x = raw(key);
-    return x === null ? null : Math.round(x * 10) / 10;
-  };
-  // Open Food Facts stores everything in grams; labels show these in milligrams.
-  const mg = (key: string): number | null => {
-    const x = raw(key);
-    return x === null ? null : Math.round(x * 10000) / 10;
-  };
-  const hasServing = get("energy-kcal_serving") !== null || get("proteins_serving") !== null;
+  // Small amounts keep two decimals (e.g. 0.45 mg copper), the rest one.
+  const tidy = (x: number) => (x < 1 ? Math.round(x * 100) / 100 : Math.round(x * 10) / 10);
+  const hasServing = raw("energy-kcal_serving") !== null || raw("proteins_serving") !== null;
   const suffix = hasServing ? "_serving" : "_100g";
-  const kcal =
-    get(`energy-kcal${suffix}`) ??
-    (get(`energy-kj${suffix}`) !== null ? Math.round(get(`energy-kj${suffix}`)! / 4.184) : null) ??
-    (get(`energy${suffix}`) !== null ? Math.round(get(`energy${suffix}`)! / 4.184) : null);
+  const kj = raw(`energy-kj${suffix}`) ?? raw(`energy${suffix}`);
+  const kcal = raw(`energy-kcal${suffix}`) ?? (kj !== null ? kj / 4.184 : null);
+
+  // Open Food Facts stores every nutrient in grams; convert to the unit we show.
+  const toUnit = { g: 1, mg: 1000, mcg: 1_000_000, kcal: 1 } as const;
+  const values = Object.fromEntries(
+    NUTRIENTS.filter((x) => "off" in x).map((x) => {
+      const v = raw(`${(x as { off: string }).off}${suffix}`);
+      return [x.key, v === null ? null : tidy(v * toUnit[x.unit])];
+    }),
+  ) as Partial<Record<NutrientKey, number | null>>;
+  // Many products only list salt: sodium = salt ÷ 2.5.
+  const salt = raw(`salt${suffix}`);
+  if (values.sodium_mg == null && salt !== null) values.sodium_mg = Math.round(salt * 400);
 
   return {
     ...emptyDraft("barcode"),
+    ...values,
     name: (p.product_name ?? "").trim(),
     brand: (p.brands ?? "").split(",")[0].trim(),
     serving_label: hasServing ? (p.serving_size || "1 serving") : "100 g",
     barcode: code,
-    kcal: kcal ?? 0,
-    protein_g: get(`proteins${suffix}`) ?? 0,
-    carbs_g: get(`carbohydrates${suffix}`) ?? 0,
-    fat_g: get(`fat${suffix}`) ?? 0,
-    sat_fat_g: get(`saturated-fat${suffix}`),
-    trans_fat_g: get(`trans-fat${suffix}`),
-    cholesterol_mg: mg(`cholesterol${suffix}`),
-    sodium_mg: mg(`sodium${suffix}`) ?? (raw(`salt${suffix}`) !== null ? Math.round(raw(`salt${suffix}`)! * 400) : null),
-    fiber_g: get(`fiber${suffix}`),
-    sugar_g: get(`sugars${suffix}`),
-    added_sugar_g: get(`added-sugars${suffix}`),
-    vitamin_d_mcg: raw(`vitamin-d${suffix}`) !== null ? Math.round(raw(`vitamin-d${suffix}`)! * 1e7) / 10 : null,
-    calcium_mg: mg(`calcium${suffix}`),
-    iron_mg: mg(`iron${suffix}`),
-    potassium_mg: mg(`potassium${suffix}`),
+    kcal: kcal === null ? 0 : Math.round(kcal),
+    protein_g: values.protein_g ?? 0,
+    carbs_g: values.carbs_g ?? 0,
+    fat_g: values.fat_g ?? 0,
     per: hasServing ? "serving" : "100g",
   };
 }
