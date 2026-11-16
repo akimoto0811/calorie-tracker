@@ -8,8 +8,9 @@ import {
   CORE_NUTRIENTS,
   MEALS,
   MEAL_LABEL,
-  MICRO_NUTRIENTS,
-  NUTRIENT_KEYS,
+  EXTRA_NUTRIENTS,
+  NUTRIENTS,
+  NUTRIENT_INFO,
   NUTRIENT_LABEL,
   NUTRIENT_NAME,
   NUTRIENT_UNIT,
@@ -18,7 +19,8 @@ import {
   type Meal,
   type NutrientKey,
 } from "@/lib/types";
-import { Alert } from "./icons";
+import { Alert, Close, Plus } from "./icons";
+import { NutrientPicker } from "./NutrientPicker";
 import { MealChips, ServingsStepper } from "./LogControls";
 import { ServingInput } from "./ServingInput";
 
@@ -68,6 +70,20 @@ export function FoodForm({
   // Fields still flagged as uncertain. Editing a field clears its flag.
   const [flagged, setFlagged] = useState<Set<string>>(() => new Set(uncertain));
 
+  // What's typed in each nutrient box, so the form and the picker sheet always agree.
+  const [raw, setRaw] = useState<Partial<Record<NutrientKey, string>>>(() =>
+    Object.fromEntries(
+      Object.entries(initial)
+        .filter(([k, v]) => (NUTRIENT_INFO as Record<string, unknown>)[k] && v !== null && v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ),
+  );
+  // Extra nutrients shown on the form: ones with a value (e.g. read from a label) or flagged.
+  const [added, setAdded] = useState<Set<NutrientKey>>(
+    () => new Set(EXTRA_NUTRIENTS.filter((k) => NUTRIENT_INFO[k].kind === "extra" && (initial[k] !== null || uncertain.includes(k)))),
+  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const flaggedList = useMemo(() => [...flagged] as Field[], [flagged]);
 
   function set<K extends keyof FoodDraft>(key: K, value: FoodDraft[K]) {
@@ -79,8 +95,12 @@ export function FoodForm({
     }
   }
 
-  function setNum(key: NutrientKey, raw: string) {
-    const s = raw.replace(",", ".");
+  function setNum(key: NutrientKey, text: string) {
+    setRaw((r) => ({ ...r, [key]: text }));
+    if (NUTRIENT_INFO[key].kind === "extra" && text.trim() !== "" && !added.has(key)) {
+      setAdded(new Set(added).add(key));
+    }
+    const s = text.replace(",", ".");
     if (s.trim() === "") return set(key, ((CORE_NUTRIENTS as readonly string[]).includes(key) ? 0 : null) as never);
     const n = Number(s);
     if (Number.isFinite(n) && n >= 0) set(key, n as never);
@@ -123,7 +143,6 @@ export function FoodForm({
 
   /** One line of the Nutrition Facts table: name on the left, amount and unit on the right. */
   const nfRow = (key: NutrientKey) => {
-    const v = draft[key];
     const sub = SUB_NUTRIENTS.includes(key);
     return (
       <div key={key} className={`nf-row${sub ? " sub" : ""}${key === "kcal" ? " kcal" : ""}`}>
@@ -135,14 +154,34 @@ export function FoodForm({
             aria-describedby={flagged.has(key) ? "uncertain-note" : undefined}
             inputMode="decimal"
             placeholder={(CORE_NUTRIENTS as readonly string[]).includes(key) ? "0" : "–"}
-            defaultValue={v === null || v === undefined ? "" : String(v)}
+            value={raw[key] ?? ""}
             onChange={(e) => setNum(key, e.target.value)}
           />
           <span aria-hidden="true">{NUTRIENT_UNIT[key]}</span>
         </div>
+        {NUTRIENT_INFO[key].kind === "extra" ? (
+          <button type="button" className="nf-remove" aria-label={`Remove ${NUTRIENT_NAME[key]}`} onClick={() => removeExtra(key)}>
+            <Close size={16} />
+          </button>
+        ) : (
+          <span className="nf-remove" aria-hidden="true" />
+        )}
       </div>
     );
   };
+
+  function removeExtra(key: NutrientKey) {
+    setNum(key, "");
+    const next = new Set(added);
+    next.delete(key);
+    setAdded(next);
+  }
+
+  function closePicker() {
+    setPickerOpen(false);
+    // Lines left empty in the sheet don't stay on the form.
+    setAdded(new Set([...added].filter((k) => (raw[k] ?? "").trim() !== "")));
+  }
 
   const input = (key: Field, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => {
     const isNum = !(key === "name" || key === "brand" || key === "serving_label");
@@ -194,9 +233,12 @@ export function FoodForm({
           <span>Nutrition facts</span>
           <span className="muted small">Per serving ({draft.serving_label})</span>
         </div>
-        {NUTRIENT_KEYS.filter((k) => !MICRO_NUTRIENTS.includes(k)).map(nfRow)}
-        <div className="nf-divider" />
-        {MICRO_NUTRIENTS.map(nfRow)}
+        <div className="nf-sub-head">Amount per serving</div>
+        {NUTRIENTS.filter((n) => n.kind !== "extra" || added.has(n.key)).map((n) => nfRow(n.key))}
+        <button type="button" className="nf-add" onClick={() => setPickerOpen(true)}>
+          <Plus size={18} />
+          Add more nutrients
+        </button>
         <p className="muted small" style={{ marginTop: 10 }}>
           Leave a line empty if it isn&apos;t on the label.
         </p>
@@ -255,6 +297,7 @@ export function FoodForm({
             : "Saves the food to your own foods without logging it."}
         </p>
       </div>
+      {pickerOpen && <NutrientPicker raw={raw} flagged={flagged} onChange={setNum} onClose={closePicker} />}
     </form>
   );
 }

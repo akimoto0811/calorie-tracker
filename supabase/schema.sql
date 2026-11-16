@@ -45,6 +45,12 @@ create table if not exists public.profiles (
 -- Added in a later update: daily water goal for databases created before it existed.
 alter table public.profiles add column if not exists water_goal_ml integer not null default 2000
   check (water_goal_ml between 0 and 20000);
+-- "About you": optional, used only to suggest a calorie goal. Private like the goals.
+alter table public.profiles add column if not exists sex text check (sex in ('female', 'male'));
+alter table public.profiles add column if not exists birth_year integer check (birth_year between 1900 and 2100);
+alter table public.profiles add column if not exists height_cm numeric check (height_cm between 50 and 300);
+alter table public.profiles add column if not exists weight_kg numeric check (weight_kg between 20 and 500);
+alter table public.profiles add column if not exists activity text check (activity in ('little', 'light', 'moderate', 'very'));
 
 -- ───────────────────────────── Foods ─────────────────────────────
 -- Nutrition values are per one serving (serving_label describes it, e.g. "250 ml").
@@ -61,7 +67,7 @@ create table if not exists public.foods (
   sat_fat_g numeric check (sat_fat_g >= 0),
   sugar_g numeric check (sugar_g >= 0),
   fiber_g numeric check (fiber_g >= 0),
-  salt_g numeric check (salt_g >= 0), -- older column; sodium_mg is used now
+  salt_g numeric check (salt_g >= 0),
   trans_fat_g numeric check (trans_fat_g >= 0),
   cholesterol_mg numeric check (cholesterol_mg >= 0),
   sodium_mg numeric check (sodium_mg >= 0),
@@ -70,6 +76,40 @@ create table if not exists public.foods (
   calcium_mg numeric check (calcium_mg >= 0),
   iron_mg numeric check (iron_mg >= 0),
   potassium_mg numeric check (potassium_mg >= 0),
+  mono_fat_g numeric check (mono_fat_g >= 0),
+  poly_fat_g numeric check (poly_fat_g >= 0),
+  omega3_g numeric check (omega3_g >= 0),
+  omega6_g numeric check (omega6_g >= 0),
+  soluble_fiber_g numeric check (soluble_fiber_g >= 0),
+  insoluble_fiber_g numeric check (insoluble_fiber_g >= 0),
+  polyols_g numeric check (polyols_g >= 0),
+  starch_g numeric check (starch_g >= 0),
+  chloride_mg numeric check (chloride_mg >= 0),
+  vit_a_mcg numeric check (vit_a_mcg >= 0),
+  vit_c_mg numeric check (vit_c_mg >= 0),
+  vit_e_mg numeric check (vit_e_mg >= 0),
+  vit_k_mcg numeric check (vit_k_mcg >= 0),
+  thiamin_mg numeric check (thiamin_mg >= 0),
+  riboflavin_mg numeric check (riboflavin_mg >= 0),
+  niacin_mg numeric check (niacin_mg >= 0),
+  pantothenic_mg numeric check (pantothenic_mg >= 0),
+  vit_b6_mg numeric check (vit_b6_mg >= 0),
+  biotin_mcg numeric check (biotin_mcg >= 0),
+  folate_mcg numeric check (folate_mcg >= 0),
+  vit_b12_mcg numeric check (vit_b12_mcg >= 0),
+  choline_mg numeric check (choline_mg >= 0),
+  magnesium_mg numeric check (magnesium_mg >= 0),
+  phosphorus_mg numeric check (phosphorus_mg >= 0),
+  zinc_mg numeric check (zinc_mg >= 0),
+  copper_mg numeric check (copper_mg >= 0),
+  manganese_mg numeric check (manganese_mg >= 0),
+  selenium_mcg numeric check (selenium_mcg >= 0),
+  iodine_mcg numeric check (iodine_mcg >= 0),
+  chromium_mcg numeric check (chromium_mcg >= 0),
+  molybdenum_mcg numeric check (molybdenum_mcg >= 0),
+  fluoride_mg numeric check (fluoride_mg >= 0),
+  caffeine_mg numeric check (caffeine_mg >= 0),
+  alcohol_g numeric check (alcohol_g >= 0),
   barcode text,
   source food_source not null default 'manual',
   label_photo_path text,
@@ -102,7 +142,7 @@ create table if not exists public.food_logs (
   sat_fat_g numeric,
   sugar_g numeric,
   fiber_g numeric,
-  salt_g numeric, -- older column; sodium_mg is used now
+  salt_g numeric,
   trans_fat_g numeric,
   cholesterol_mg numeric,
   sodium_mg numeric,
@@ -111,6 +151,40 @@ create table if not exists public.food_logs (
   calcium_mg numeric,
   iron_mg numeric,
   potassium_mg numeric,
+  mono_fat_g numeric,
+  poly_fat_g numeric,
+  omega3_g numeric,
+  omega6_g numeric,
+  soluble_fiber_g numeric,
+  insoluble_fiber_g numeric,
+  polyols_g numeric,
+  starch_g numeric,
+  chloride_mg numeric,
+  vit_a_mcg numeric,
+  vit_c_mg numeric,
+  vit_e_mg numeric,
+  vit_k_mcg numeric,
+  thiamin_mg numeric,
+  riboflavin_mg numeric,
+  niacin_mg numeric,
+  pantothenic_mg numeric,
+  vit_b6_mg numeric,
+  biotin_mcg numeric,
+  folate_mcg numeric,
+  vit_b12_mcg numeric,
+  choline_mg numeric,
+  magnesium_mg numeric,
+  phosphorus_mg numeric,
+  zinc_mg numeric,
+  copper_mg numeric,
+  manganese_mg numeric,
+  selenium_mcg numeric,
+  iodine_mcg numeric,
+  chromium_mcg numeric,
+  molybdenum_mcg numeric,
+  fluoride_mg numeric,
+  caffeine_mg numeric,
+  alcohol_g numeric,
   created_at timestamptz not null default now()
 );
 
@@ -136,6 +210,76 @@ alter table public.food_logs add column if not exists potassium_mg numeric;
 -- Older foods stored salt; sodium is salt ÷ 2.5 (and grams → milligrams).
 update public.foods set sodium_mg = round(salt_g * 400) where sodium_mg is null and salt_g is not null;
 update public.food_logs set sodium_mg = round(salt_g * 400) where sodium_mg is null and salt_g is not null;
+
+-- Added later: everything else a label can show (vitamins, minerals, fat and fibre types…).
+alter table public.foods add column if not exists mono_fat_g numeric check (mono_fat_g >= 0);
+alter table public.foods add column if not exists poly_fat_g numeric check (poly_fat_g >= 0);
+alter table public.foods add column if not exists omega3_g numeric check (omega3_g >= 0);
+alter table public.foods add column if not exists omega6_g numeric check (omega6_g >= 0);
+alter table public.foods add column if not exists soluble_fiber_g numeric check (soluble_fiber_g >= 0);
+alter table public.foods add column if not exists insoluble_fiber_g numeric check (insoluble_fiber_g >= 0);
+alter table public.foods add column if not exists polyols_g numeric check (polyols_g >= 0);
+alter table public.foods add column if not exists starch_g numeric check (starch_g >= 0);
+alter table public.foods add column if not exists chloride_mg numeric check (chloride_mg >= 0);
+alter table public.foods add column if not exists vit_a_mcg numeric check (vit_a_mcg >= 0);
+alter table public.foods add column if not exists vit_c_mg numeric check (vit_c_mg >= 0);
+alter table public.foods add column if not exists vit_e_mg numeric check (vit_e_mg >= 0);
+alter table public.foods add column if not exists vit_k_mcg numeric check (vit_k_mcg >= 0);
+alter table public.foods add column if not exists thiamin_mg numeric check (thiamin_mg >= 0);
+alter table public.foods add column if not exists riboflavin_mg numeric check (riboflavin_mg >= 0);
+alter table public.foods add column if not exists niacin_mg numeric check (niacin_mg >= 0);
+alter table public.foods add column if not exists pantothenic_mg numeric check (pantothenic_mg >= 0);
+alter table public.foods add column if not exists vit_b6_mg numeric check (vit_b6_mg >= 0);
+alter table public.foods add column if not exists biotin_mcg numeric check (biotin_mcg >= 0);
+alter table public.foods add column if not exists folate_mcg numeric check (folate_mcg >= 0);
+alter table public.foods add column if not exists vit_b12_mcg numeric check (vit_b12_mcg >= 0);
+alter table public.foods add column if not exists choline_mg numeric check (choline_mg >= 0);
+alter table public.foods add column if not exists magnesium_mg numeric check (magnesium_mg >= 0);
+alter table public.foods add column if not exists phosphorus_mg numeric check (phosphorus_mg >= 0);
+alter table public.foods add column if not exists zinc_mg numeric check (zinc_mg >= 0);
+alter table public.foods add column if not exists copper_mg numeric check (copper_mg >= 0);
+alter table public.foods add column if not exists manganese_mg numeric check (manganese_mg >= 0);
+alter table public.foods add column if not exists selenium_mcg numeric check (selenium_mcg >= 0);
+alter table public.foods add column if not exists iodine_mcg numeric check (iodine_mcg >= 0);
+alter table public.foods add column if not exists chromium_mcg numeric check (chromium_mcg >= 0);
+alter table public.foods add column if not exists molybdenum_mcg numeric check (molybdenum_mcg >= 0);
+alter table public.foods add column if not exists fluoride_mg numeric check (fluoride_mg >= 0);
+alter table public.foods add column if not exists caffeine_mg numeric check (caffeine_mg >= 0);
+alter table public.foods add column if not exists alcohol_g numeric check (alcohol_g >= 0);
+alter table public.food_logs add column if not exists mono_fat_g numeric;
+alter table public.food_logs add column if not exists poly_fat_g numeric;
+alter table public.food_logs add column if not exists omega3_g numeric;
+alter table public.food_logs add column if not exists omega6_g numeric;
+alter table public.food_logs add column if not exists soluble_fiber_g numeric;
+alter table public.food_logs add column if not exists insoluble_fiber_g numeric;
+alter table public.food_logs add column if not exists polyols_g numeric;
+alter table public.food_logs add column if not exists starch_g numeric;
+alter table public.food_logs add column if not exists chloride_mg numeric;
+alter table public.food_logs add column if not exists vit_a_mcg numeric;
+alter table public.food_logs add column if not exists vit_c_mg numeric;
+alter table public.food_logs add column if not exists vit_e_mg numeric;
+alter table public.food_logs add column if not exists vit_k_mcg numeric;
+alter table public.food_logs add column if not exists thiamin_mg numeric;
+alter table public.food_logs add column if not exists riboflavin_mg numeric;
+alter table public.food_logs add column if not exists niacin_mg numeric;
+alter table public.food_logs add column if not exists pantothenic_mg numeric;
+alter table public.food_logs add column if not exists vit_b6_mg numeric;
+alter table public.food_logs add column if not exists biotin_mcg numeric;
+alter table public.food_logs add column if not exists folate_mcg numeric;
+alter table public.food_logs add column if not exists vit_b12_mcg numeric;
+alter table public.food_logs add column if not exists choline_mg numeric;
+alter table public.food_logs add column if not exists magnesium_mg numeric;
+alter table public.food_logs add column if not exists phosphorus_mg numeric;
+alter table public.food_logs add column if not exists zinc_mg numeric;
+alter table public.food_logs add column if not exists copper_mg numeric;
+alter table public.food_logs add column if not exists manganese_mg numeric;
+alter table public.food_logs add column if not exists selenium_mcg numeric;
+alter table public.food_logs add column if not exists iodine_mcg numeric;
+alter table public.food_logs add column if not exists chromium_mcg numeric;
+alter table public.food_logs add column if not exists molybdenum_mcg numeric;
+alter table public.food_logs add column if not exists fluoride_mg numeric;
+alter table public.food_logs add column if not exists caffeine_mg numeric;
+alter table public.food_logs add column if not exists alcohol_g numeric;
 
 -- ───────────────────────────── Water ─────────────────────────────
 -- One row per glass/bottle you log. Private, like the food log.
@@ -218,7 +362,8 @@ revoke all on public.foods, public.food_logs, public.water_logs, public.invites,
 -- Your own goals are read through my_profile() below.
 revoke select on public.profiles from authenticated;
 grant select (id, display_name) on public.profiles to authenticated;
-grant update (display_name, goal_mode, kcal_goal, protein_goal, carbs_goal, fat_goal, water_goal_ml) on public.profiles to authenticated;
+grant update (display_name, goal_mode, kcal_goal, protein_goal, carbs_goal, fat_goal, water_goal_ml,
+  sex, birth_year, height_cm, weight_kg, activity) on public.profiles to authenticated;
 
 -- Your own goals, readable only by you.
 create or replace function public.my_profile()
@@ -289,6 +434,8 @@ set search_path = public
 as $$
 declare
   f public.foods;
+  k text;
+  v text;
 begin
   if auth.uid() is null then
     raise exception 'Not signed in';
@@ -312,24 +459,21 @@ begin
     update public.foods set
       name = coalesce(nullif(fixes ->> 'name', ''), name),
       brand = case when fixes ? 'brand' then nullif(fixes ->> 'brand', '') else brand end,
-      serving_label = coalesce(nullif(fixes ->> 'serving_label', ''), serving_label),
-      kcal = coalesce((fixes ->> 'kcal')::numeric, kcal),
-      protein_g = coalesce((fixes ->> 'protein_g')::numeric, protein_g),
-      carbs_g = coalesce((fixes ->> 'carbs_g')::numeric, carbs_g),
-      fat_g = coalesce((fixes ->> 'fat_g')::numeric, fat_g),
-      sat_fat_g = case when fixes ? 'sat_fat_g' then (fixes ->> 'sat_fat_g')::numeric else sat_fat_g end,
-      sugar_g = case when fixes ? 'sugar_g' then (fixes ->> 'sugar_g')::numeric else sugar_g end,
-      fiber_g = case when fixes ? 'fiber_g' then (fixes ->> 'fiber_g')::numeric else fiber_g end,
-      salt_g = case when fixes ? 'salt_g' then (fixes ->> 'salt_g')::numeric else salt_g end,
-      trans_fat_g = case when fixes ? 'trans_fat_g' then (fixes ->> 'trans_fat_g')::numeric else trans_fat_g end,
-      cholesterol_mg = case when fixes ? 'cholesterol_mg' then (fixes ->> 'cholesterol_mg')::numeric else cholesterol_mg end,
-      sodium_mg = case when fixes ? 'sodium_mg' then (fixes ->> 'sodium_mg')::numeric else sodium_mg end,
-      added_sugar_g = case when fixes ? 'added_sugar_g' then (fixes ->> 'added_sugar_g')::numeric else added_sugar_g end,
-      vitamin_d_mcg = case when fixes ? 'vitamin_d_mcg' then (fixes ->> 'vitamin_d_mcg')::numeric else vitamin_d_mcg end,
-      calcium_mg = case when fixes ? 'calcium_mg' then (fixes ->> 'calcium_mg')::numeric else calcium_mg end,
-      iron_mg = case when fixes ? 'iron_mg' then (fixes ->> 'iron_mg')::numeric else iron_mg end,
-      potassium_mg = case when fixes ? 'potassium_mg' then (fixes ->> 'potassium_mg')::numeric else potassium_mg end
+      serving_label = coalesce(nullif(fixes ->> 'serving_label', ''), serving_label)
     where id = food_id;
+    -- Nutrient fixes: any numeric nutrient column (kcal, *_g, *_mg, *_mcg).
+    -- Calories and macros can't be emptied; the others can.
+    for k, v in select key, value from jsonb_each_text(fixes) loop
+      if (k = 'kcal' or k ~ '^[a-z0-9_]+_(g|mg|mcg)$')
+        and exists (
+          select 1 from information_schema.columns
+          where table_schema = 'public' and table_name = 'foods' and column_name = k and data_type = 'numeric'
+        )
+        and not (v is null and k in ('kcal', 'protein_g', 'carbs_g', 'fat_g'))
+      then
+        execute format('update public.foods set %I = $1 where id = $2', k) using v::numeric, food_id;
+      end if;
+    end loop;
   end if;
 
   update public.foods set

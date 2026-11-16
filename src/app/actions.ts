@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { DATE_RE } from "@/lib/dates";
 import { scale, num } from "@/lib/nutrition";
 import type { Food, FoodDraft, Meal, NutrientKey, Nutrients } from "@/lib/types";
-import { MEALS, NUTRIENT_KEYS } from "@/lib/types";
+import { ACTIVITIES, MEALS, NUTRIENT_KEYS } from "@/lib/types";
 
 type Result = { ok: true } | { ok: false, error: string };
 
@@ -154,6 +154,21 @@ export async function deleteLog(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+/** The optional "About you" fields. Anything missing or out of range is saved as empty. */
+function aboutYou(formData: FormData) {
+  const inRange = (v: number | null, lo: number, hi: number) => (v !== null && v >= lo && v <= hi ? v : null);
+  const sex = String(formData.get("sex") ?? "");
+  const activity = String(formData.get("activity") ?? "");
+  const age = inRange(num(formData.get("age")), 10, 120);
+  return {
+    sex: sex === "female" || sex === "male" ? sex : null,
+    birth_year: age === null ? null : new Date().getFullYear() - Math.round(age),
+    height_cm: inRange(num(formData.get("height_cm")), 50, 300),
+    weight_kg: inRange(num(formData.get("weight_kg")), 20, 500),
+    activity: ACTIVITIES.some((a) => a.key === activity) ? activity : null,
+  };
+}
+
 export async function saveGoals(_prev: unknown, formData: FormData) {
   const { supabase, user } = await requireUser();
   const mode = String(formData.get("goal_mode") ?? "maintain");
@@ -167,6 +182,7 @@ export async function saveGoals(_prev: unknown, formData: FormData) {
       carbs_goal: n("carbs_goal"),
       fat_goal: n("fat_goal"),
       water_goal_ml: n("water_goal_ml"),
+      ...aboutYou(formData),
     })
     .eq("id", user.id);
   if (error) return { ok: false, message: error.message };
