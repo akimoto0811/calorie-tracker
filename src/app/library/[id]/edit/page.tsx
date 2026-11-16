@@ -25,6 +25,7 @@ export default async function EditFood({ params }: { params: Promise<{ id: strin
   const initial = {
     name: food.name,
     brand: food.brand ?? "",
+    local_name: food.local_name ?? "",
     serving_label: food.serving_label,
     barcode: food.barcode,
     source: food.source,

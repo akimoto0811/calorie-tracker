@@ -34,7 +34,7 @@ export default async function Library({
   if (filter === "barcode") query = query.not("barcode", "is", null);
   if (q) {
     const term = `*${q.replace(/[%_*,().]/g, " ").trim()}*`;
-    query = query.or(`name.ilike.${term},brand.ilike.${term}`);
+    query = query.or(`name.ilike.${term},local_name.ilike.${term},brand.ilike.${term}`);
   }
 
   const [{ data }, reviewCount, admin] = await Promise.all([
@@ -129,9 +129,13 @@ export default async function Library({
                   <img src={photos[f.photo_path]} alt="" className="food-thumb" />
                 )}
                 <div className="grow stack" style={{ gap: 4 }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{f.name}</div>
-                    {f.brand && <div className="muted small">{f.brand}</div>}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.3 }}>{f.name}</div>
+                    {(f.local_name || f.brand) && (
+                      <div className="muted" style={{ fontSize: 13, lineHeight: 1.35 }}>
+                        {[f.local_name, f.brand].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </div>
                   <div className="muted small">
                     {fmt(f.kcal)} kcal · {f.serving_label} · P {fmt(f.protein_g, 1)} C {fmt(f.carbs_g, 1)} F{" "}

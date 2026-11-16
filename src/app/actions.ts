@@ -57,6 +57,7 @@ function foodRow(userId: string, draft: FoodDraft, share: boolean) {
       created_by: userId,
       name: name.slice(0, 200),
       brand: draft.brand.trim() || null,
+      local_name: (draft.local_name ?? "").trim().slice(0, 200) || null,
       serving_label: draft.serving_label.trim() || "1 serving",
       barcode,
       source: draft.source,
@@ -255,6 +256,7 @@ export async function updateFood(input: { id: string; draft: FoodDraft; share: b
   const fields = {
     name: d.name.trim().slice(0, 200),
     brand: d.brand.trim(),
+    local_name: (d.local_name ?? "").trim(),
     serving_label: d.serving_label.trim() || "1 serving",
     barcode: barcode ?? "",
     photo_path: d.photo_path ?? "",

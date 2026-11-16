@@ -19,7 +19,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
       .select("*")
       .or(`status.eq.approved,created_by.eq.${user.id}`)
       .neq("status", "rejected")
-      .or(`name.ilike.${term},brand.ilike.${term}`)
+      .or(`name.ilike.${term},local_name.ilike.${term},brand.ilike.${term}`)
       .order("name")
       .limit(25);
     results = (data ?? []) as Food[];

@@ -27,11 +27,12 @@ import { ServingInput } from "./ServingInput";
 import { BarcodeField } from "./BarcodeField";
 import { FoodPhotoField } from "./FoodPhotoField";
 
-type Field = NutrientKey | "name" | "brand" | "serving_label";
+type Field = NutrientKey | "name" | "local_name" | "brand" | "serving_label";
 
 const FIELD_NAME: Record<Field, string> = {
   ...NUTRIENT_LABEL,
-  name: "Food name",
+  name: "Food name (English)",
+  local_name: "Name in original language",
   brand: "Brand",
   serving_label: "Serving",
 };
@@ -219,7 +220,7 @@ export function FoodForm({
   }
 
   const input = (key: Field, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => {
-    const isNum = !(key === "name" || key === "brand" || key === "serving_label");
+    const isNum = !(key === "name" || key === "local_name" || key === "brand" || key === "serving_label");
     const v = draft[key as keyof FoodDraft];
     return (
       <div className="field">
@@ -239,7 +240,7 @@ export function FoodForm({
             : {
                 value: (v as string) ?? "",
                 onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-                  set(key as "name" | "brand" | "serving_label", e.target.value),
+                  set(key as "name" | "local_name" | "brand" | "serving_label", e.target.value),
               })}
           {...props}
         />
@@ -256,6 +257,9 @@ export function FoodForm({
           <FoodPhotoField initialUrl={photoUrl} onChange={(path) => set("photo_path", path)} />
         </div>
         <div className="span2">{input("name", { required: true, autoComplete: "off" })}</div>
+        <div className="span2">
+          {input("local_name", { placeholder: "Optional, e.g. 고래밥", autoComplete: "off", lang: "" })}
+        </div>
         <div className="span2">{input("brand", { placeholder: "Optional", autoComplete: "off" })}</div>
         <div className="span2">
           <ServingInput

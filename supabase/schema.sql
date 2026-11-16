@@ -119,6 +119,7 @@ create table if not exists public.foods (
   source food_source not null default 'manual',
   label_photo_path text,
   photo_path text,
+  local_name text,
   status food_status not null default 'private',
   reviewed_by uuid references auth.users (id) on delete set null,
   reviewed_at timestamptz,
@@ -130,6 +131,8 @@ create index if not exists foods_status_idx on public.foods (status);
 create index if not exists foods_barcode_idx on public.foods (barcode);
 -- Added later: a picture of the food itself (separate from the label photo).
 alter table public.foods add column if not exists photo_path text;
+-- Added later: the food's name in its original language, e.g. 고래밥 (the main name stays in English).
+alter table public.foods add column if not exists local_name text;
 create index if not exists foods_created_by_idx on public.foods (created_by);
 
 -- ───────────────────────────── Food log ─────────────────────────────
@@ -545,6 +548,7 @@ begin
   update public.foods set
     name = coalesce(nullif(left(trim(fields ->> 'name'), 200), ''), name),
     brand = case when fields ? 'brand' then nullif(trim(fields ->> 'brand'), '') else brand end,
+    local_name = case when fields ? 'local_name' then nullif(left(trim(fields ->> 'local_name'), 200), '') else local_name end,
     serving_label = coalesce(nullif(trim(fields ->> 'serving_label'), ''), serving_label),
     barcode = case when fields ? 'barcode' then code else barcode end,
     -- A new food photo must be one you uploaded (it sits in your own folder).

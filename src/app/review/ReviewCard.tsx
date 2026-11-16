@@ -75,6 +75,7 @@ export function ReviewCard({
           <div className="stack" style={{ gap: 6 }}>
             <h2 style={{ fontFamily: "var(--font)", fontSize: 19 }}>{food.name}</h2>
             <div className="muted" style={{ fontSize: 14 }}>
+              {food.local_name ? `${food.local_name} · ` : ""}
               {food.brand ? `${food.brand} · ` : ""}
               {food.serving_label} serving
             </div>

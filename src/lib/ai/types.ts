@@ -3,6 +3,7 @@ import { NUTRIENTS, NUTRIENT_KEYS, type NutrientKey } from "../types";
 /** What an AI provider returns after reading a nutrition label photo. All values per serving. */
 export interface LabelReading {
   name: string | null;
+  local_name: string | null;
   brand: string | null;
   serving_label: string | null;
   values: Partial<Record<NutrientKey, number | null>>;
@@ -33,5 +34,7 @@ Return the nutrition values for ONE SERVING as printed on the label.
   Leave out anything not on the label. Never guess a number you cannot see.
 - Put the field name in "uncertain" for every value that is blurry, cut off, ambiguous, or that you computed/converted.
   Allowed field names: name, brand, serving_label, ${NUTRIENT_KEYS.join(", ")}.
-- name / brand: read them from the packaging if visible, otherwise null.
+- name: the product name in English. If the packaging is in another language and shows no English name, translate it into short, plain English.
+- local_name: the product name as printed in its original language and script (e.g. 고래밥, ポッキー), only if it isn't English; otherwise null.
+- brand: read it from the packaging if visible, otherwise null.
 - note: one short sentence for the user if something needs their attention, otherwise null.`;
