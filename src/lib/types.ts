@@ -11,43 +11,84 @@ export const MEAL_LABEL: Record<Meal, string> = {
 export type FoodSource = "manual" | "label" | "barcode";
 export type FoodStatus = "private" | "pending" | "approved" | "rejected";
 
-/** Nutrition values for one serving. Core values are required; the rest are optional. */
-export interface Nutrients {
-  kcal: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  sat_fat_g: number | null;
-  sugar_g: number | null;
-  fiber_g: number | null;
-  salt_g: number | null;
-}
-
+/**
+ * Every nutrient we track, in the order a Nutrition Facts label lists them.
+ * Calories, fat, carbs and protein are required; the rest are optional (null = not on the label).
+ */
 export const NUTRIENT_KEYS = [
   "kcal",
-  "protein_g",
-  "carbs_g",
   "fat_g",
   "sat_fat_g",
-  "sugar_g",
+  "trans_fat_g",
+  "cholesterol_mg",
+  "sodium_mg",
+  "carbs_g",
   "fiber_g",
-  "salt_g",
+  "sugar_g",
+  "added_sugar_g",
+  "protein_g",
+  "vitamin_d_mcg",
+  "calcium_mg",
+  "iron_mg",
+  "potassium_mg",
 ] as const;
 export type NutrientKey = (typeof NUTRIENT_KEYS)[number];
 
-export const NUTRIENT_LABEL: Record<NutrientKey, string> = {
-  kcal: "Calories (kcal)",
-  protein_g: "Protein (g)",
-  carbs_g: "Carbs (g)",
-  fat_g: "Fat (g)",
-  sat_fat_g: "Saturated fat (g)",
-  sugar_g: "Sugar (g)",
-  fiber_g: "Fibre (g)",
-  salt_g: "Salt (g)",
+export const CORE_NUTRIENTS = ["kcal", "protein_g", "carbs_g", "fat_g"] as const satisfies readonly NutrientKey[];
+type CoreKey = (typeof CORE_NUTRIENTS)[number];
+export const EXTRA_NUTRIENTS = NUTRIENT_KEYS.filter(
+  (k) => !(CORE_NUTRIENTS as readonly string[]).includes(k),
+) as Exclude<NutrientKey, CoreKey>[];
+
+/** Nutrition values for one serving. */
+export type Nutrients = { [K in CoreKey]: number } & { [K in Exclude<NutrientKey, CoreKey>]: number | null };
+
+/** Short name, as printed on a label. */
+export const NUTRIENT_NAME: Record<NutrientKey, string> = {
+  kcal: "Calories",
+  fat_g: "Total fat",
+  sat_fat_g: "Saturated fat",
+  trans_fat_g: "Trans fat",
+  cholesterol_mg: "Cholesterol",
+  sodium_mg: "Sodium",
+  carbs_g: "Total carbs",
+  fiber_g: "Fibre",
+  sugar_g: "Total sugars",
+  added_sugar_g: "Added sugars",
+  protein_g: "Protein",
+  vitamin_d_mcg: "Vitamin D",
+  calcium_mg: "Calcium",
+  iron_mg: "Iron",
+  potassium_mg: "Potassium",
 };
 
-export const CORE_NUTRIENTS: NutrientKey[] = ["kcal", "protein_g", "carbs_g", "fat_g"];
-export const EXTRA_NUTRIENTS: NutrientKey[] = ["sat_fat_g", "sugar_g", "fiber_g", "salt_g"];
+export const NUTRIENT_UNIT: Record<NutrientKey, string> = {
+  kcal: "kcal",
+  fat_g: "g",
+  sat_fat_g: "g",
+  trans_fat_g: "g",
+  cholesterol_mg: "mg",
+  sodium_mg: "mg",
+  carbs_g: "g",
+  fiber_g: "g",
+  sugar_g: "g",
+  added_sugar_g: "g",
+  protein_g: "g",
+  vitamin_d_mcg: "mcg",
+  calcium_mg: "mg",
+  iron_mg: "mg",
+  potassium_mg: "mg",
+};
+
+/** e.g. "Sodium (mg)". */
+export const NUTRIENT_LABEL = Object.fromEntries(
+  NUTRIENT_KEYS.map((k) => [k, `${NUTRIENT_NAME[k]} (${NUTRIENT_UNIT[k]})`]),
+) as Record<NutrientKey, string>;
+
+/** Indented under the line above, like on a label. */
+export const SUB_NUTRIENTS: NutrientKey[] = ["sat_fat_g", "trans_fat_g", "fiber_g", "sugar_g", "added_sugar_g"];
+/** Vitamins and minerals, shown below a divider. */
+export const MICRO_NUTRIENTS: NutrientKey[] = ["vitamin_d_mcg", "calcium_mg", "iron_mg", "potassium_mg"];
 
 export interface Food extends Nutrients {
   id: string;
@@ -110,9 +151,6 @@ export function emptyDraft(source: FoodSource): FoodDraft {
     protein_g: 0,
     carbs_g: 0,
     fat_g: 0,
-    sat_fat_g: null,
-    sugar_g: null,
-    fiber_g: null,
-    salt_g: null,
+    ...(Object.fromEntries(EXTRA_NUTRIENTS.map((k) => [k, null])) as Record<(typeof EXTRA_NUTRIENTS)[number], null>),
   };
 }

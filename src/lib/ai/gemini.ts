@@ -1,6 +1,7 @@
 import "server-only";
 import type { LabelReader, LabelReading } from "./types";
 import { LABEL_PROMPT } from "./types";
+import { NUTRIENT_KEYS } from "../types";
 
 const NUM = { type: "NUMBER", nullable: true };
 const STR = { type: "STRING", nullable: true };
@@ -11,14 +12,7 @@ const RESPONSE_SCHEMA = {
     name: STR,
     brand: STR,
     serving_label: STR,
-    kcal: NUM,
-    protein_g: NUM,
-    carbs_g: NUM,
-    fat_g: NUM,
-    sat_fat_g: NUM,
-    sugar_g: NUM,
-    fiber_g: NUM,
-    salt_g: NUM,
+    ...Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, NUM])),
     uncertain: { type: "ARRAY", items: { type: "STRING" } },
     note: STR,
   },
@@ -94,16 +88,7 @@ export class GeminiLabelReader implements LabelReader {
       name: s("name"),
       brand: s("brand"),
       serving_label: s("serving_label"),
-      values: {
-        kcal: n("kcal"),
-        protein_g: n("protein_g"),
-        carbs_g: n("carbs_g"),
-        fat_g: n("fat_g"),
-        sat_fat_g: n("sat_fat_g"),
-        sugar_g: n("sugar_g"),
-        fiber_g: n("fiber_g"),
-        salt_g: n("salt_g"),
-      },
+      values: Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, n(k)])),
       uncertain: Array.isArray(parsed.uncertain)
         ? (parsed.uncertain as unknown[]).filter((x): x is string => typeof x === "string")
         : [],
