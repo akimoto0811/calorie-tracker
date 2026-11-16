@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createFoodAndLog } from "@/app/actions";
-import { fmt } from "@/lib/nutrition";
+import { amountText, fmt } from "@/lib/nutrition";
 import {
   CORE_NUTRIENTS,
   EXTRA_NUTRIENTS,
@@ -173,7 +173,7 @@ export function FoodForm({
         <div>
           <div style={{ fontWeight: 700 }}>How much did you have?</div>
           <div className="muted small">
-            {fmt(servings, 2)} × {draft.serving_label} = {fmt(draft.kcal * servings)} kcal
+            {amountText(draft.serving_label, servings)} · {fmt(draft.kcal * servings)} kcal
           </div>
         </div>
         <ServingsStepper value={servings} onChange={setServings} />

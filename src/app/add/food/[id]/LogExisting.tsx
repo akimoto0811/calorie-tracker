@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { logFood } from "@/app/actions";
-import { fmt } from "@/lib/nutrition";
+import { amountText, fmt } from "@/lib/nutrition";
 import { MEAL_LABEL, type Meal } from "@/lib/types";
 import { MealChips, ServingsStepper } from "@/components/LogControls";
 
@@ -28,7 +28,7 @@ export function LogExisting(props: {
         <div>
           <div style={{ fontWeight: 700 }}>How much did you have?</div>
           <div className="muted small">
-            {fmt(servings, 2)} × {props.servingLabel} = {fmt(props.kcal * servings)} kcal
+            {amountText(props.servingLabel, servings)} · {fmt(props.kcal * servings)} kcal
           </div>
         </div>
         <ServingsStepper value={servings} onChange={setServings} />
