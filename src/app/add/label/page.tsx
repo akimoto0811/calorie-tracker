@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
@@ -10,9 +11,7 @@ export default async function LabelPage({ searchParams }: { searchParams: AddSea
   return (
     <main className="page no-nav">
       <header className="topbar">
-        <Link href={`/add?${qs}`} className="icon-btn" aria-label="Back">
-          <ChevronLeft />
-        </Link>
+        <BackButton fallback={`/add?${qs}`} />
         <h1 style={{ fontSize: 24 }}>Snap nutrition label</h1>
       </header>
       <LabelFlow userId={user.id} meal={meal} date={date} today={today} />

@@ -154,12 +154,12 @@ export async function saveGoals(_prev: unknown, formData: FormData) {
   const { error } = await supabase
     .from("profiles")
     .update({
-      display_name: String(formData.get("display_name") ?? "").trim().slice(0, 60),
       goal_mode: ["lose", "maintain", "gain"].includes(mode) ? mode : "maintain",
       kcal_goal: n("kcal_goal"),
       protein_goal: n("protein_goal"),
       carbs_goal: n("carbs_goal"),
       fat_goal: n("fat_goal"),
+      water_goal_ml: n("water_goal_ml"),
     })
     .eq("id", user.id);
   if (error) return { ok: false, message: error.message };
@@ -215,4 +215,40 @@ export async function deleteFood(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (id) await supabase.from("foods").delete().eq("id", id);
   revalidatePath("/", "layout");
+}
+
+export async function updateName(_prev: unknown, formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const name = String(formData.get("display_name") ?? "").trim().slice(0, 60);
+  if (!name) return { ok: false, message: "Your name can't be empty." };
+  const { error } = await supabase.from("profiles").update({ display_name: name }).eq("id", user.id);
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Name saved." };
+}
+
+export async function addWater(input: { ml: number; date: string }): Promise<Result> {
+  const { supabase, user } = await requireUser();
+  if (!DATE_RE.test(input.date)) return { ok: false, error: "Invalid date." };
+  const ml = Math.round(input.ml);
+  if (!(ml > 0 && ml <= 5000)) return { ok: false, error: "Enter between 1 and 5000 ml." };
+  const { error } = await supabase.from("water_logs").insert({ user_id: user.id, logged_on: input.date, ml });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** Removes the most recent water entry for that day. */
+export async function undoWater(input: { date: string }): Promise<Result> {
+  const { supabase } = await requireUser();
+  if (!DATE_RE.test(input.date)) return { ok: false, error: "Invalid date." };
+  const { data } = await supabase
+    .from("water_logs")
+    .select("id")
+    .eq("logged_on", input.date)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (data?.[0]) await supabase.from("water_logs").delete().eq("id", data[0].id);
+  revalidatePath("/");
+  return { ok: true };
 }

@@ -16,8 +16,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type meal_type as enum ('breakfast', 'lunch', 'dinner', 'snacks');
+  create type meal_type as enum ('breakfast', 'lunch', 'dinner', 'snacks', 'drinks');
 exception when duplicate_object then null; end $$;
+-- Added in a later update: makes sure older databases also have "drinks".
+alter type meal_type add value if not exists 'drinks';
 
 -- ───────────────────────────── Invites ─────────────────────────────
 -- The app is invite-only. The very first person to sign up is let in automatically;
@@ -37,8 +39,12 @@ create table if not exists public.profiles (
   protein_goal integer not null default 120 check (protein_goal between 0 and 2000),
   carbs_goal integer not null default 220 check (carbs_goal between 0 and 2000),
   fat_goal integer not null default 70 check (fat_goal between 0 and 2000),
+  water_goal_ml integer not null default 2000 check (water_goal_ml between 0 and 20000),
   created_at timestamptz not null default now()
 );
+-- Added in a later update: daily water goal for databases created before it existed.
+alter table public.profiles add column if not exists water_goal_ml integer not null default 2000
+  check (water_goal_ml between 0 and 20000);
 
 -- ───────────────────────────── Foods ─────────────────────────────
 -- Nutrition values are per one serving (serving_label describes it, e.g. "250 ml").
@@ -94,6 +100,18 @@ create table if not exists public.food_logs (
 
 create index if not exists food_logs_user_day_idx on public.food_logs (user_id, logged_on);
 
+-- ───────────────────────────── Water ─────────────────────────────
+-- One row per glass/bottle you log. Private, like the food log.
+create table if not exists public.water_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  logged_on date not null,
+  ml integer not null check (ml > 0 and ml <= 5000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists water_logs_user_day_idx on public.water_logs (user_id, logged_on);
+
 -- ───────────────────────────── New-user trigger ─────────────────────────────
 create or replace function public.handle_new_user()
 returns trigger
@@ -135,6 +153,7 @@ alter table public.invites enable row level security;
 alter table public.profiles enable row level security;
 alter table public.foods enable row level security;
 alter table public.food_logs enable row level security;
+alter table public.water_logs enable row level security;
 
 -- Invites: any member can see and add invites.
 drop policy if exists "members read invites" on public.invites;
@@ -154,15 +173,15 @@ create policy "edit own profile" on public.profiles
 
 -- Table access for signed-in users (row level security above still decides which rows).
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.foods, public.food_logs to authenticated;
+grant select, insert, update, delete on public.foods, public.food_logs, public.water_logs to authenticated;
 grant select, insert on public.invites to authenticated;
-revoke all on public.foods, public.food_logs, public.invites, public.profiles from anon;
+revoke all on public.foods, public.food_logs, public.water_logs, public.invites, public.profiles from anon;
 
 -- Goals are private: other members can only read your id and display name.
 -- Your own goals are read through my_profile() below.
 revoke select on public.profiles from authenticated;
 grant select (id, display_name) on public.profiles to authenticated;
-grant update (display_name, goal_mode, kcal_goal, protein_goal, carbs_goal, fat_goal) on public.profiles to authenticated;
+grant update (display_name, goal_mode, kcal_goal, protein_goal, carbs_goal, fat_goal, water_goal_ml) on public.profiles to authenticated;
 
 -- Your own goals, readable only by you.
 create or replace function public.my_profile()
@@ -206,6 +225,13 @@ create policy "delete own unapproved foods" on public.foods
 -- Food log: strictly private.
 drop policy if exists "own log" on public.food_logs;
 create policy "own log" on public.food_logs
+  for all to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Water log: strictly private.
+drop policy if exists "own water" on public.water_logs;
+create policy "own water" on public.water_logs
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());

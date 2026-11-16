@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
@@ -10,9 +11,7 @@ export default async function ScanPage({ searchParams }: { searchParams: AddSear
   return (
     <main className="page no-nav">
       <header className="topbar">
-        <Link href={`/add?${qs}`} className="icon-btn" aria-label="Back">
-          <ChevronLeft />
-        </Link>
+        <BackButton fallback={`/add?${qs}`} />
         <h1 style={{ fontSize: 24 }}>Scan barcode</h1>
       </header>
       <ScanFlow meal={meal} date={date} today={today} qs={qs} />

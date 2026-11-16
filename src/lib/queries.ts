@@ -8,6 +8,7 @@ export const DEFAULT_GOALS: Omit<Profile, "id" | "display_name"> = {
   protein_goal: 120,
   carbs_goal: 220,
   fat_goal: 70,
+  water_goal_ml: 2000,
 };
 
 export async function getMyProfile(supabase: SupabaseClient, userId: string): Promise<Profile> {
