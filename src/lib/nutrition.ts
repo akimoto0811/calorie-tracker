@@ -63,3 +63,20 @@ export function num(v: FormDataEntryValue | null | undefined): number | null {
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
+
+/**
+ * Describes how much you had: "250 ml" for one serving, "3 × 250 ml = 750 ml" for several.
+ * Falls back to "3 × 1 bar (40 g)" when the serving isn't a simple amount and unit.
+ */
+export function amountText(servingLabel: string, servings: number): string {
+  if (servings === 1) return servingLabel;
+  const m = servingLabel.trim().match(/^(\d+(?:[.,]\d+)?)\s*([^\d()]+)$/);
+  const times = `${fmt(servings, 2)} × ${servingLabel}`;
+  if (!m) return times;
+  const total = Number(m[1].replace(",", ".")) * servings;
+  const unit = m[2].trim();
+  // Show big amounts in litres / kilograms.
+  if (unit === "ml" && total >= 1000) return `${times} = ${fmt(total / 1000, 2)} L`;
+  if (unit === "g" && total >= 1000) return `${times} = ${fmt(total / 1000, 2)} kg`;
+  return `${times} = ${fmt(total, 1)} ${unit}`;
+}

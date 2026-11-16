@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
-import { fmt } from "@/lib/nutrition";
+import { amountText, fmt } from "@/lib/nutrition";
 import { MEALS, MEAL_LABEL, type Food, type LogEntry } from "@/lib/types";
 import { Barcode, Camera, ChevronRight, Close, Pencil, Search } from "@/components/icons";
 import { QuickAdd } from "@/components/QuickAdd";
@@ -160,7 +160,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
                   <div style={{ fontWeight: 600 }}>{r.name}</div>
                   <div className="muted small">
                     {fmt(r.kcal)} kcal ·{" "}
-                    {Number(r.servings) === 1 ? r.serving_label : `${fmt(r.servings, 2)} × ${r.serving_label}`}
+                    {amountText(r.serving_label, Number(r.servings))}
                   </div>
                 </div>
                 <QuickAdd logId={r.id} meal={meal} date={date} label={r.name} />

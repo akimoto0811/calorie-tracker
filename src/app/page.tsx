@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { getMyProfile, getReviewCount } from "@/lib/queries";
 import { addDays, DATE_RE, formatLong, today } from "@/lib/dates";
-import { fmt, sum } from "@/lib/nutrition";
+import { amountText, fmt, sum } from "@/lib/nutrition";
 import { MEALS, MEAL_LABEL, type LogEntry } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { CalorieRing, MacroBars } from "@/components/Progress";
@@ -136,7 +136,7 @@ export default async function Dashboard({
                       {l.name}
                       <span className="muted">
                         {" "}
-                        · {Number(l.servings) === 1 ? l.serving_label : `${fmt(l.servings, 2)} × ${l.serving_label}`}
+                        · {amountText(l.serving_label, Number(l.servings))}
                       </span>
                     </span>
                     <span className="muted">{fmt(l.kcal)}</span>
