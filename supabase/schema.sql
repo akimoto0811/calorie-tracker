@@ -514,3 +514,6 @@ drop policy if exists "delete own label photos" on storage.objects;
 create policy "delete own label photos" on storage.objects
   for delete to authenticated
   using (bucket_id = 'label-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Tell the Supabase API to pick up new tables and columns right away.
+notify pgrst, 'reload schema';
