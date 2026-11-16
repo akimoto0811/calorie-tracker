@@ -31,18 +31,23 @@ const RESPONSE_SCHEMA = {
 export class GeminiLabelReader implements LabelReader {
   readonly name = "Gemini";
 
+  /**
+   * Models to try, in order. Google retires models over time (2.5 Flash returns 404 for new
+   * projects since Sept 2026), so if one is gone we move on to the next.
+   * GEMINI_MODEL, when set, is tried first.
+   */
+  private models: string[];
+
   constructor(
     private apiKey: string,
-    private model = "gemini-2.5-flash",
-  ) {}
+    model?: string,
+  ) {
+    this.models = [...new Set([model, "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].filter(Boolean) as string[])];
+  }
 
   async readLabel(image: { data: Buffer; mimeType: string }): Promise<LabelReading> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      this.model,
-    )}:generateContent`;
-
-    const call = (withSchema: boolean) =>
-      fetch(url, {
+    const call = (model: string, withSchema: boolean) =>
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": this.apiKey },
         body: JSON.stringify({
@@ -63,11 +68,16 @@ export class GeminiLabelReader implements LabelReader {
         }),
       });
 
-    let res = await call(true);
-    // If Gemini rejects the request shape, ask again with plain JSON output.
-    if (res.status === 400) {
-      console.error("Gemini rejected the schema, retrying without it:", (await res.text().catch(() => "")).slice(0, 500));
-      res = await call(false);
+    let res!: Response;
+    for (const model of this.models) {
+      res = await call(model, true);
+      // If Gemini rejects the request shape, ask again with plain JSON output.
+      if (res.status === 400) {
+        console.error(`Gemini ${model} rejected the schema, retrying without it:`, (await res.text().catch(() => "")).slice(0, 500));
+        res = await call(model, false);
+      }
+      if (res.status !== 404) break;
+      console.error(`Gemini model ${model} is not available (404), trying the next one.`);
     }
 
     if (res.status === 429) {
