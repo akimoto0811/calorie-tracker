@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { getMyProfile, getReviewCount } from "@/lib/queries";
 import { addDays, DATE_RE, formatLong, today } from "@/lib/dates";
-import { amountText, fmt, sum } from "@/lib/nutrition";
+import { eatenText, fmt, splitBrand, sum } from "@/lib/nutrition";
 import { MEALS, MEAL_LABEL, type LogEntry } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { CalorieRing, MacroBars } from "@/components/Progress";
@@ -123,38 +123,37 @@ export default async function Dashboard({
               );
             }
             return (
-              <div key={meal} className="card tight">
-                <div className="between">
-                  <span style={{ fontWeight: 700 }}>{MEAL_LABEL[meal]}</span>
-                  <span className="muted" style={{ fontSize: 14 }}>
-                    {fmt(sum(items).kcal)} kcal
+              <div key={meal} className="card meal-card">
+                <div className="meal-head">
+                  <span className="meal-title">{MEAL_LABEL[meal]}</span>
+                  <span className="meal-kcal">
+                    <b>{fmt(sum(items).kcal)}</b> kcal
                   </span>
+                  <Link href={addHref} className="meal-add" aria-label={`Add to ${MEAL_LABEL[meal].toLowerCase()}`}>
+                    <Plus size={16} />
+                  </Link>
                 </div>
-                {items.map((l) => (
-                  <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                    <span className="grow">
-                      {l.name}
-                      <span className="muted">
-                        {" "}
-                        · {amountText(l.serving_label, Number(l.servings))}
-                      </span>
-                    </span>
-                    <span className="muted">{fmt(l.kcal)}</span>
-                    <form action={deleteLog}>
-                      <input type="hidden" name="id" value={l.id} />
-                      <button
-                        className="icon-btn"
-                        style={{ width: 32, height: 32, border: 0, color: "var(--muted)" }}
-                        aria-label={`Remove ${l.name}`}
-                      >
-                        <Trash size={16} />
-                      </button>
-                    </form>
-                  </div>
-                ))}
-                <Link href={addHref} style={{ fontSize: 14, fontWeight: 600 }}>
-                  Add to {MEAL_LABEL[meal].toLowerCase()}
-                </Link>
+                {items.map((l) => {
+                  const { name, brand } = splitBrand(l.name);
+                  return (
+                    <div key={l.id} className="meal-row">
+                      <div className="meal-row-text">
+                        <span className="meal-row-name">{name}</span>
+                        <span className="meal-row-sub">
+                          {brand ? `${brand} · ` : ""}
+                          {eatenText(l.serving_label, Number(l.servings))}
+                        </span>
+                      </div>
+                      <span className="meal-row-kcal">{fmt(l.kcal)}</span>
+                      <form action={deleteLog}>
+                        <input type="hidden" name="id" value={l.id} />
+                        <button className="meal-del" aria-label={`Remove ${l.name}`}>
+                          <Trash size={15} />
+                        </button>
+                      </form>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

@@ -22,13 +22,18 @@ export async function getMyProfile(supabase: SupabaseClient, userId: string): Pr
   return (row as Profile) ?? { id: userId, display_name: "", ...DEFAULT_GOALS };
 }
 
-/** Number of shared foods waiting for someone other than me to review. */
+/** True for the app owner, who can approve any shared food, including their own. */
+export async function amIAdmin(supabase: SupabaseClient): Promise<boolean> {
+  const { data } = await supabase.rpc("my_profile");
+  const row = Array.isArray(data) ? data[0] : data;
+  return !!(row as Profile | null)?.is_admin;
+}
+
+/** Number of shared foods waiting for me to review (others' foods; every food for the owner). */
 export async function getReviewCount(supabase: SupabaseClient, userId: string): Promise<number> {
-  const { count } = await supabase
-    .from("foods")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .neq("created_by", userId);
+  let query = supabase.from("foods").select("id", { count: "exact", head: true }).eq("status", "pending");
+  if (!(await amIAdmin(supabase))) query = query.neq("created_by", userId);
+  const { count } = await query;
   return count ?? 0;
 }
 

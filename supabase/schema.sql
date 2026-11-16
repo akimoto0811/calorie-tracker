@@ -51,6 +51,11 @@ alter table public.profiles add column if not exists birth_year integer check (b
 alter table public.profiles add column if not exists height_cm numeric check (height_cm between 50 and 300);
 alter table public.profiles add column if not exists weight_kg numeric check (weight_kg between 20 and 500);
 alter table public.profiles add column if not exists activity text check (activity in ('little', 'light', 'moderate', 'very'));
+-- The app owner (the first account) can approve any shared food, including their own.
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+update public.profiles set is_admin = true
+where id = (select id from public.profiles order by created_at asc limit 1)
+  and not exists (select 1 from public.profiles where is_admin);
 
 -- ───────────────────────────── Foods ─────────────────────────────
 -- Nutrition values are per one serving (serving_label describes it, e.g. "250 ml").
@@ -310,14 +315,15 @@ begin
     raise exception 'This email has not been invited yet';
   end if;
 
-  insert into public.profiles (id, display_name)
+  insert into public.profiles (id, display_name, is_admin)
   values (
     new.id,
     coalesce(
       nullif(new.raw_user_meta_data ->> 'full_name', ''),
       nullif(new.raw_user_meta_data ->> 'name', ''),
       split_part(new.email, '@', 1)
-    )
+    ),
+    user_count = 0
   )
   on conflict (id) do nothing;
   return new;
@@ -360,7 +366,8 @@ revoke all on public.foods, public.food_logs, public.water_logs, public.invites,
 
 -- Goals are private: other members can only read your id and display name.
 -- Your own goals are read through my_profile() below.
-revoke select on public.profiles from authenticated;
+-- Only the columns granted below can be changed, so nobody can make themselves the app owner.
+revoke select, insert, update, delete on public.profiles from authenticated;
 grant select (id, display_name) on public.profiles to authenticated;
 grant update (display_name, goal_mode, kcal_goal, protein_goal, carbs_goal, fat_goal, water_goal_ml,
   sex, birth_year, height_cm, weight_kg, activity) on public.profiles to authenticated;
@@ -451,7 +458,8 @@ begin
   if f.status <> 'pending' then
     raise exception 'This food is not waiting for review';
   end if;
-  if f.created_by = auth.uid() then
+  if f.created_by = auth.uid()
+    and not coalesce((select is_admin from public.profiles where id = auth.uid()), false) then
     raise exception 'You cannot review your own food';
   end if;
 
