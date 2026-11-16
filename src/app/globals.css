@@ -75,7 +75,8 @@ textarea {
   gap: 18px;
 }
 .page.no-nav {
-  padding-bottom: 32px;
+  /* Room for Safari's floating toolbar so the last button isn't hidden behind it. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
 h1,
