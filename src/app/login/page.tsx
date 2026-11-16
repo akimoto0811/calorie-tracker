@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LoginForm } from "./LoginForm";
 import { Logo } from "@/components/icons";
 
@@ -45,6 +46,8 @@ export default async function LoginPage({
 
       <p className="muted small" style={{ marginTop: "auto", textAlign: "center", lineHeight: 1.5 }}>
         Invite-only for now. Ask a friend who already uses the app to invite your email.
+        <br />
+        <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link>
       </p>
     </main>
   );

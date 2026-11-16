@@ -16,6 +16,8 @@ Everything runs on free plans: Supabase (database, sign-in, photo storage), Verc
 
 It takes about 30–45 minutes. You'll create three free accounts and copy a few values between them. Keep a notes file open to paste values into as you go.
 
+The order: **1** database → **2** Gemini key → **3** deploy the app → **4** connect the database to the app's address → **5** (optional) email settings → **6** Google sign-in → **7** sign in and invite friends.
+
 ### 1. Create the database (Supabase)
 
 1. Go to [supabase.com](https://supabase.com) and sign up (signing in with GitHub is easiest).
@@ -33,20 +35,35 @@ It takes about 30–45 minutes. You'll create three free accounts and copy a few
 
 The free tier is plenty for a group of friends. If it ever runs out for the day, the app tells you and you can type the numbers in instead. The key stays on the server and is never sent to people's phones.
 
-### 3. Put the app online (Vercel)
+### 3. Deploy the app (Vercel)
 
-1. Go to [vercel.com](https://vercel.com) and sign up **with GitHub**.
-2. Click **Add New… → Project**, find `calorie-tracker` in the list and click **Import**. (If you don't see it, click "Adjust GitHub App Permissions" and give Vercel access to the repository.)
-3. Open **Environment Variables** and add these four, one at a time:
+This puts the app on the internet. You need the Supabase values from step 1 and the Gemini key from step 2.
 
-   | Name | Value |
+**If you haven't connected Vercel yet:**
+
+1. Go to [vercel.com](https://vercel.com) and click **Sign Up**. Choose **Continue with GitHub**.
+2. On your Vercel dashboard click **Add New… → Project**.
+3. Find `calorie-tracker` in the list of your GitHub repositories and click **Import**. If it isn't listed, click **Adjust GitHub App Permissions**, give Vercel access to the `calorie-tracker` repository, and come back.
+4. Leave the settings it suggests as they are (Framework Preset: Next.js). Open the **Environment Variables** section and add these four. For each one, type the name in **Key**, paste the value in **Value**, and click **Add**:
+
+   | Key | Value |
    | --- | --- |
    | `NEXT_PUBLIC_SUPABASE_URL` | the Supabase Project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the Supabase anon / publishable key |
    | `AI_PROVIDER` | `gemini` |
    | `GEMINI_API_KEY` | your Gemini key |
 
-4. Click **Deploy**. After a minute you get a web address like `https://calorie-tracker-abc.vercel.app`. Copy it.
+5. Click **Deploy** and wait a minute or two for the confetti.
+6. Click **Continue to Dashboard**. Your app's address is shown under **Domains**, e.g. `https://calorie-tracker-abc.vercel.app`. Copy it into your notes: you'll need it in steps 4 and 6.
+
+**If you already imported the repository into Vercel** (for example, Vercel is already commenting on pull requests), the project exists but doesn't have its settings yet:
+
+1. Open the `calorie-tracker` project on [vercel.com](https://vercel.com).
+2. Go to **Settings → Environment Variables** and add the four keys and values from the table above. Leave all environments ticked and click **Save** after each.
+3. Go to the **Deployments** tab. On the top deployment (marked **Production**), click the **⋯** menu → **Redeploy** → **Redeploy**. Environment variables only take effect after a new deployment.
+4. When it shows **Ready**, go back to the project's main page and copy the address under **Domains**.
+
+From now on, Vercel redeploys automatically whenever a change is merged into `main` on GitHub.
 
 ### 4. Tell Supabase where the app lives
 
@@ -91,10 +108,19 @@ The easy way around both is for everyone to use **Continue with Google** (step 6
 
 1. In Supabase go to **Authentication → Sign In / Providers → Google**. Copy the **Callback URL** shown there (looks like `https://abcdefgh.supabase.co/auth/v1/callback`). Leave this tab open.
 2. In a new tab open [console.cloud.google.com](https://console.cloud.google.com). Create a project (top bar → project picker → **New project**, any name).
-3. Go to **APIs & Services → OAuth consent screen** (or **Google Auth Platform → Branding**). Click **Get started**, enter an app name (e.g. "Calorie Tracker") and your email, choose **External** audience, and finish.
-4. Under **Audience**, click **Publish app** so your friends can use it. (Otherwise only people you add as "test users" can sign in.) Basic sign-in doesn't need Google's review.
-5. Go to **Clients** (or **APIs & Services → Credentials → Create credentials → OAuth client ID**). Choose **Web application**. Under **Authorized redirect URIs** click **Add URI** and paste the Supabase Callback URL from step 1. Click **Create**.
-6. Copy the **Client ID** and **Client secret**, paste them into the Supabase Google provider page, switch **Enable** on, and save.
+3. Go to **APIs & Services → OAuth consent screen** (or **Google Auth Platform**). Click **Get started**, enter an app name (e.g. "Calorie Tracker") and your email, choose **External** audience, and finish.
+4. Open **Branding** and fill in the app's web addresses. Use your Vercel address from step 3 (here `https://calorie-tracker-abc.vercel.app`; replace it with yours):
+   - **App logo:** leave empty. Uploading a logo makes Google require a manual review that takes weeks.
+   - **Application home page:** `https://calorie-tracker-abc.vercel.app`
+   - **Application privacy policy link:** `https://calorie-tracker-abc.vercel.app/privacy`
+   - **Application terms of service link:** `https://calorie-tracker-abc.vercel.app/terms`
+   - **Authorized domains:** click **Add domain** twice and add your Vercel domain **without** `https://`, e.g. `calorie-tracker-abc.vercel.app`, and your Supabase domain, e.g. `abcdefgh.supabase.co`. Use the full names: Google won't accept just `vercel.app` or `supabase.co`.
+   - **Developer contact email:** your email.
+
+   Click **Save**.
+5. Open **Audience** and click **Publish app**, then **Confirm**. Now anyone with a Google account can use "Continue with Google", so you don't need to add each friend as a "test user". Basic sign-in (name and email only) doesn't need Google's review. The app is still invite-only: friends also need an invite from the app's Profile page (step 7).
+6. Go to **Clients** (or **APIs & Services → Credentials → Create credentials → OAuth client ID**). Choose **Web application**. Under **Authorized redirect URIs** click **Add URI** and paste the Supabase Callback URL from step 1. Click **Create**.
+7. Copy the **Client ID** and **Client secret**, paste them into the Supabase Google provider page, switch **Enable** on, and save.
 
 ### 7. Sign in and invite friends
 
