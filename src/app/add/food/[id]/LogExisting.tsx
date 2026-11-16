@@ -3,9 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { logFood } from "@/app/actions";
-import { amountText, fmt } from "@/lib/nutrition";
 import { MEAL_LABEL, type Meal } from "@/lib/types";
-import { MealChips, ServingsStepper } from "@/components/LogControls";
+import { AmountEaten, MealChips } from "@/components/LogControls";
 
 export function LogExisting(props: {
   foodId: string;
@@ -24,15 +23,7 @@ export function LogExisting(props: {
   return (
     <div className="stack" style={{ gap: 18 }}>
       <MealChips value={meal} onChange={setMeal} />
-      <div className="card tight" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontWeight: 700 }}>How much did you have?</div>
-          <div className="muted small">
-            {amountText(props.servingLabel, servings)} · {fmt(props.kcal * servings)} kcal
-          </div>
-        </div>
-        <ServingsStepper value={servings} onChange={setServings} />
-      </div>
+      <AmountEaten servingLabel={props.servingLabel} kcal={props.kcal} servings={servings} onChange={setServings} />
       {error && (
         <div className="notice error" role="alert">
           {error}

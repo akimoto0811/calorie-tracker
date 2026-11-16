@@ -21,7 +21,7 @@ import {
 } from "@/lib/types";
 import { Alert, Close, Plus } from "./icons";
 import { NutrientPicker } from "./NutrientPicker";
-import { MealChips, ServingsStepper } from "./LogControls";
+import { AmountEaten, MealChips } from "./LogControls";
 import { ServingInput } from "./ServingInput";
 
 type Field = NutrientKey | "name" | "brand" | "serving_label";
@@ -256,15 +256,7 @@ export function FoodForm({
         )}
       </div>
 
-      <div className="card tight" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontWeight: 700 }}>How much did you have?</div>
-          <div className="muted small">
-            {amountText(draft.serving_label, servings)} · {fmt(draft.kcal * servings)} kcal
-          </div>
-        </div>
-        <ServingsStepper value={servings} onChange={setServings} />
-      </div>
+      <AmountEaten servingLabel={draft.serving_label} kcal={draft.kcal} servings={servings} onChange={setServings} />
 
       {allowShare && (
         <label className="share-box">
