@@ -2,14 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createFoodAndLog } from "@/app/actions";
+import { createFood, createFoodAndLog } from "@/app/actions";
 import { amountText, fmt } from "@/lib/nutrition";
 import {
   CORE_NUTRIENTS,
-  EXTRA_NUTRIENTS,
   MEALS,
   MEAL_LABEL,
+  MICRO_NUTRIENTS,
+  NUTRIENT_KEYS,
   NUTRIENT_LABEL,
+  NUTRIENT_NAME,
+  NUTRIENT_UNIT,
+  SUB_NUTRIENTS,
   type FoodDraft,
   type Meal,
   type NutrientKey,
@@ -60,12 +64,9 @@ export function FoodForm({
   const [share, setShare] = useState(allowShare && defaultShare);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [doing, setDoing] = useState<"log" | "save">("log");
   // Fields still flagged as uncertain. Editing a field clears its flag.
   const [flagged, setFlagged] = useState<Set<string>>(() => new Set(uncertain));
-  const hasExtraValues = EXTRA_NUTRIENTS.some((k) => initial[k] !== null);
-  const [showExtras, setShowExtras] = useState(
-    hasExtraValues || EXTRA_NUTRIENTS.some((k) => uncertain.includes(k)),
-  );
 
   const flaggedList = useMemo(() => [...flagged] as Field[], [flagged]);
 
@@ -80,7 +81,7 @@ export function FoodForm({
 
   function setNum(key: NutrientKey, raw: string) {
     const s = raw.replace(",", ".");
-    if (s.trim() === "") return set(key, (CORE_NUTRIENTS.includes(key) ? 0 : null) as never);
+    if (s.trim() === "") return set(key, ((CORE_NUTRIENTS as readonly string[]).includes(key) ? 0 : null) as never);
     const n = Number(s);
     if (Number.isFinite(n) && n >= 0) set(key, n as never);
   }
@@ -88,6 +89,7 @@ export function FoodForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setDoing("log");
     start(async () => {
       const r = await createFoodAndLog({ draft, share, servings, meal, date });
       if (!r.ok) {
@@ -98,6 +100,49 @@ export function FoodForm({
       router.refresh();
     });
   }
+
+  /** Save the food without logging it. */
+  function saveOnly() {
+    setError(null);
+    if (!draft.name.trim()) {
+      setError("Give the food a name.");
+      document.getElementById("f-name")?.focus();
+      return;
+    }
+    setDoing("save");
+    start(async () => {
+      const r = await createFood({ draft, share });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      router.push("/library?f=mine");
+      router.refresh();
+    });
+  }
+
+  /** One line of the Nutrition Facts table: name on the left, amount and unit on the right. */
+  const nfRow = (key: NutrientKey) => {
+    const v = draft[key];
+    const sub = SUB_NUTRIENTS.includes(key);
+    return (
+      <div key={key} className={`nf-row${sub ? " sub" : ""}${key === "kcal" ? " kcal" : ""}`}>
+        <label htmlFor={`f-${key}`}>{NUTRIENT_NAME[key]}</label>
+        <div className="nf-input">
+          <input
+            id={`f-${key}`}
+            className={flagged.has(key) ? "input uncertain" : "input"}
+            aria-describedby={flagged.has(key) ? "uncertain-note" : undefined}
+            inputMode="decimal"
+            placeholder={(CORE_NUTRIENTS as readonly string[]).includes(key) ? "0" : "–"}
+            defaultValue={v === null || v === undefined ? "" : String(v)}
+            onChange={(e) => setNum(key, e.target.value)}
+          />
+          <span aria-hidden="true">{NUTRIENT_UNIT[key]}</span>
+        </div>
+      </div>
+    );
+  };
 
   const input = (key: Field, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => {
     const isNum = !(key === "name" || key === "brand" || key === "serving_label");
@@ -144,16 +189,21 @@ export function FoodForm({
         </div>
       </div>
 
-      <div className="card" style={{ padding: 16, gap: 12, borderRadius: 16 }}>
-        <div style={{ fontWeight: 700 }}>Per serving ({draft.serving_label})</div>
-        <div className="grid2">{CORE_NUTRIENTS.map((k) => <div key={k}>{input(k)}</div>)}</div>
-        {showExtras && (
-          <div className="grid2">{EXTRA_NUTRIENTS.map((k) => <div key={k}>{input(k, { placeholder: "–" })}</div>)}</div>
-        )}
+      <div className="card nf" style={{ padding: 16, gap: 0, borderRadius: 16 }}>
+        <div className="nf-head">
+          <span>Nutrition facts</span>
+          <span className="muted small">Per serving ({draft.serving_label})</span>
+        </div>
+        {NUTRIENT_KEYS.filter((k) => !MICRO_NUTRIENTS.includes(k)).map(nfRow)}
+        <div className="nf-divider" />
+        {MICRO_NUTRIENTS.map(nfRow)}
+        <p className="muted small" style={{ marginTop: 10 }}>
+          Leave a line empty if it isn&apos;t on the label.
+        </p>
         {flaggedList.length > 0 && (
           <div
             id="uncertain-note"
-            style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, lineHeight: 1.4, color: "var(--warn-text)" }}
+            style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, lineHeight: 1.4, color: "var(--warn-text)", marginTop: 10 }}
           >
             <Alert size={16} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
@@ -161,11 +211,6 @@ export function FoodForm({
               the photo. Please double-check {flaggedList.length === 1 ? "it" : "them"}.
             </span>
           </div>
-        )}
-        {!showExtras && (
-          <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => setShowExtras(true)}>
-            Show saturated fat, sugar, fibre, salt
-          </button>
         )}
       </div>
 
@@ -198,8 +243,18 @@ export function FoodForm({
       )}
 
       <button className="btn btn-primary" disabled={pending} style={{ height: 54 }}>
-        {pending ? <span className="spinner" /> : `Add to ${MEAL_LABEL[meal]}`}
+        {pending && doing === "log" ? <span className="spinner" /> : `Add to ${MEAL_LABEL[meal]}`}
       </button>
+      <div className="stack" style={{ gap: 6, marginTop: -6 }}>
+        <button type="button" className="btn btn-secondary" disabled={pending} style={{ height: 50 }} onClick={saveOnly}>
+          {pending && doing === "save" ? <span className="spinner" /> : "Save to library only"}
+        </button>
+        <p className="muted small" style={{ textAlign: "center" }}>
+          {share && allowShare
+            ? "Saves the food without logging it. A friend reviews it, then everyone can use it."
+            : "Saves the food to your own foods without logging it."}
+        </p>
+      </div>
     </form>
   );
 }

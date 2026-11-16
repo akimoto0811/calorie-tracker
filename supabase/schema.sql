@@ -61,7 +61,15 @@ create table if not exists public.foods (
   sat_fat_g numeric check (sat_fat_g >= 0),
   sugar_g numeric check (sugar_g >= 0),
   fiber_g numeric check (fiber_g >= 0),
-  salt_g numeric check (salt_g >= 0),
+  salt_g numeric check (salt_g >= 0), -- older column; sodium_mg is used now
+  trans_fat_g numeric check (trans_fat_g >= 0),
+  cholesterol_mg numeric check (cholesterol_mg >= 0),
+  sodium_mg numeric check (sodium_mg >= 0),
+  added_sugar_g numeric check (added_sugar_g >= 0),
+  vitamin_d_mcg numeric check (vitamin_d_mcg >= 0),
+  calcium_mg numeric check (calcium_mg >= 0),
+  iron_mg numeric check (iron_mg >= 0),
+  potassium_mg numeric check (potassium_mg >= 0),
   barcode text,
   source food_source not null default 'manual',
   label_photo_path text,
@@ -94,11 +102,40 @@ create table if not exists public.food_logs (
   sat_fat_g numeric,
   sugar_g numeric,
   fiber_g numeric,
-  salt_g numeric,
+  salt_g numeric, -- older column; sodium_mg is used now
+  trans_fat_g numeric,
+  cholesterol_mg numeric,
+  sodium_mg numeric,
+  added_sugar_g numeric,
+  vitamin_d_mcg numeric,
+  calcium_mg numeric,
+  iron_mg numeric,
+  potassium_mg numeric,
   created_at timestamptz not null default now()
 );
 
 create index if not exists food_logs_user_day_idx on public.food_logs (user_id, logged_on);
+
+-- Added later: the rest of a Nutrition Facts label. Safe to run on an existing database.
+alter table public.foods add column if not exists trans_fat_g numeric check (trans_fat_g >= 0);
+alter table public.foods add column if not exists cholesterol_mg numeric check (cholesterol_mg >= 0);
+alter table public.foods add column if not exists sodium_mg numeric check (sodium_mg >= 0);
+alter table public.foods add column if not exists added_sugar_g numeric check (added_sugar_g >= 0);
+alter table public.foods add column if not exists vitamin_d_mcg numeric check (vitamin_d_mcg >= 0);
+alter table public.foods add column if not exists calcium_mg numeric check (calcium_mg >= 0);
+alter table public.foods add column if not exists iron_mg numeric check (iron_mg >= 0);
+alter table public.foods add column if not exists potassium_mg numeric check (potassium_mg >= 0);
+alter table public.food_logs add column if not exists trans_fat_g numeric;
+alter table public.food_logs add column if not exists cholesterol_mg numeric;
+alter table public.food_logs add column if not exists sodium_mg numeric;
+alter table public.food_logs add column if not exists added_sugar_g numeric;
+alter table public.food_logs add column if not exists vitamin_d_mcg numeric;
+alter table public.food_logs add column if not exists calcium_mg numeric;
+alter table public.food_logs add column if not exists iron_mg numeric;
+alter table public.food_logs add column if not exists potassium_mg numeric;
+-- Older foods stored salt; sodium is salt ÷ 2.5 (and grams → milligrams).
+update public.foods set sodium_mg = round(salt_g * 400) where sodium_mg is null and salt_g is not null;
+update public.food_logs set sodium_mg = round(salt_g * 400) where sodium_mg is null and salt_g is not null;
 
 -- ───────────────────────────── Water ─────────────────────────────
 -- One row per glass/bottle you log. Private, like the food log.
@@ -283,7 +320,15 @@ begin
       sat_fat_g = case when fixes ? 'sat_fat_g' then (fixes ->> 'sat_fat_g')::numeric else sat_fat_g end,
       sugar_g = case when fixes ? 'sugar_g' then (fixes ->> 'sugar_g')::numeric else sugar_g end,
       fiber_g = case when fixes ? 'fiber_g' then (fixes ->> 'fiber_g')::numeric else fiber_g end,
-      salt_g = case when fixes ? 'salt_g' then (fixes ->> 'salt_g')::numeric else salt_g end
+      salt_g = case when fixes ? 'salt_g' then (fixes ->> 'salt_g')::numeric else salt_g end,
+      trans_fat_g = case when fixes ? 'trans_fat_g' then (fixes ->> 'trans_fat_g')::numeric else trans_fat_g end,
+      cholesterol_mg = case when fixes ? 'cholesterol_mg' then (fixes ->> 'cholesterol_mg')::numeric else cholesterol_mg end,
+      sodium_mg = case when fixes ? 'sodium_mg' then (fixes ->> 'sodium_mg')::numeric else sodium_mg end,
+      added_sugar_g = case when fixes ? 'added_sugar_g' then (fixes ->> 'added_sugar_g')::numeric else added_sugar_g end,
+      vitamin_d_mcg = case when fixes ? 'vitamin_d_mcg' then (fixes ->> 'vitamin_d_mcg')::numeric else vitamin_d_mcg end,
+      calcium_mg = case when fixes ? 'calcium_mg' then (fixes ->> 'calcium_mg')::numeric else calcium_mg end,
+      iron_mg = case when fixes ? 'iron_mg' then (fixes ->> 'iron_mg')::numeric else iron_mg end,
+      potassium_mg = case when fixes ? 'potassium_mg' then (fixes ->> 'potassium_mg')::numeric else potassium_mg end
     where id = food_id;
   end if;
 

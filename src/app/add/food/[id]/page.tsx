@@ -1,11 +1,11 @@
 import { BackButton } from "@/components/BackButton";
+import { NutritionTable } from "@/components/NutritionTable";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
 import { getNames, signedPhotoUrl } from "@/lib/queries";
-import { fmt } from "@/lib/nutrition";
-import { EXTRA_NUTRIENTS, NUTRIENT_LABEL, type Food } from "@/lib/types";
+import type { Food } from "@/lib/types";
 import { ChevronLeft } from "@/components/icons";
 import { LogExisting } from "./LogExisting";
 
@@ -60,18 +60,7 @@ export default async function LogFoodPage({
             </div>
           </div>
         </div>
-        <div>
-          <div className="nrow"><span>Calories</span><b>{fmt(food.kcal)} kcal</b></div>
-          <div className="nrow"><span>Protein</span><b>{fmt(food.protein_g, 1)} g</b></div>
-          <div className="nrow"><span>Carbs</span><b>{fmt(food.carbs_g, 1)} g</b></div>
-          <div className="nrow"><span>Fat</span><b>{fmt(food.fat_g, 1)} g</b></div>
-          {EXTRA_NUTRIENTS.filter((k) => food[k] !== null).map((k) => (
-            <div key={k} className="nrow">
-              <span>{NUTRIENT_LABEL[k].replace(" (g)", "")}</span>
-              <b>{fmt(food[k], 1)} g</b>
-            </div>
-          ))}
-        </div>
+        <NutritionTable values={food} />
       </article>
 
       <LogExisting foodId={food.id} kcal={Number(food.kcal)} servingLabel={food.serving_label} meal={meal} date={date} today={today} />

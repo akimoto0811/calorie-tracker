@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FoodForm } from "@/components/FoodForm";
-import { emptyDraft, type FoodDraft, type Meal } from "@/lib/types";
+import { EXTRA_NUTRIENTS, emptyDraft, type FoodDraft, type Meal } from "@/lib/types";
 import { Alert, Camera, Check } from "@/components/icons";
 import type { LabelReading } from "@/lib/ai/types";
 
@@ -50,10 +50,7 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
         protein_g: reading.values.protein_g ?? 0,
         carbs_g: reading.values.carbs_g ?? 0,
         fat_g: reading.values.fat_g ?? 0,
-        sat_fat_g: reading.values.sat_fat_g ?? null,
-        sugar_g: reading.values.sugar_g ?? null,
-        fiber_g: reading.values.fiber_g ?? null,
-        salt_g: reading.values.salt_g ?? null,
+        ...Object.fromEntries(EXTRA_NUTRIENTS.map((k) => [k, reading.values[k] ?? null])),
       };
       // Anything the AI left empty for a core value also needs a look.
       const missing = (["kcal", "protein_g", "carbs_g", "fat_g"] as const).filter((k) => reading.values[k] == null);

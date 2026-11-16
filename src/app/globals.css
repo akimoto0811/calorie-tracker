@@ -720,3 +720,62 @@ p {
   --water-soft: #e0f2f6;
   --water-text: #0b5f75;
 }
+
+/* Nutrition facts table in the food form */
+.nf-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 6px solid var(--text);
+  font-weight: 800;
+  font-size: 18px;
+}
+.nf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.nf-row label {
+  font-weight: 700;
+  font-size: 15px;
+}
+.nf-row.sub label {
+  font-weight: 500;
+  padding-left: 18px;
+}
+.nf-row.kcal {
+  border-bottom: 4px solid var(--text);
+  padding: 8px 0;
+}
+.nf-row.kcal label {
+  font-size: 18px;
+  font-weight: 800;
+}
+.nf-input {
+  position: relative;
+  width: 132px;
+  flex-shrink: 0;
+}
+.nf-input .input {
+  height: 42px;
+  padding-right: 52px;
+  text-align: right;
+}
+.nf-input span {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.nf-divider {
+  border-top: 6px solid var(--text);
+  margin-top: -1px;
+}

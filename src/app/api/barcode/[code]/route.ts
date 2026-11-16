@@ -55,10 +55,19 @@ type OffProduct = {
 
 function fromOpenFoodFacts(code: string, p: OffProduct): FoodDraft & { per: "serving" | "100g" } {
   const n = p.nutriments ?? {};
-  const get = (key: string): number | null => {
+  const raw = (key: string): number | null => {
     const v = n[key];
     const x = typeof v === "string" ? Number(v) : v;
-    return typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.round(x * 10) / 10 : null;
+    return typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null;
+  };
+  const get = (key: string): number | null => {
+    const x = raw(key);
+    return x === null ? null : Math.round(x * 10) / 10;
+  };
+  // Open Food Facts stores everything in grams; labels show these in milligrams.
+  const mg = (key: string): number | null => {
+    const x = raw(key);
+    return x === null ? null : Math.round(x * 10000) / 10;
   };
   const hasServing = get("energy-kcal_serving") !== null || get("proteins_serving") !== null;
   const suffix = hasServing ? "_serving" : "_100g";
@@ -78,9 +87,16 @@ function fromOpenFoodFacts(code: string, p: OffProduct): FoodDraft & { per: "ser
     carbs_g: get(`carbohydrates${suffix}`) ?? 0,
     fat_g: get(`fat${suffix}`) ?? 0,
     sat_fat_g: get(`saturated-fat${suffix}`),
-    sugar_g: get(`sugars${suffix}`),
+    trans_fat_g: get(`trans-fat${suffix}`),
+    cholesterol_mg: mg(`cholesterol${suffix}`),
+    sodium_mg: mg(`sodium${suffix}`) ?? (raw(`salt${suffix}`) !== null ? Math.round(raw(`salt${suffix}`)! * 400) : null),
     fiber_g: get(`fiber${suffix}`),
-    salt_g: get(`salt${suffix}`),
+    sugar_g: get(`sugars${suffix}`),
+    added_sugar_g: get(`added-sugars${suffix}`),
+    vitamin_d_mcg: raw(`vitamin-d${suffix}`) !== null ? Math.round(raw(`vitamin-d${suffix}`)! * 1e7) / 10 : null,
+    calcium_mg: mg(`calcium${suffix}`),
+    iron_mg: mg(`iron${suffix}`),
+    potassium_mg: mg(`potassium${suffix}`),
     per: hasServing ? "serving" : "100g",
   };
 }

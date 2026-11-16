@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { DATE_RE } from "@/lib/dates";
 import { scale, num } from "@/lib/nutrition";
-import type { Food, FoodDraft, Meal, NutrientKey } from "@/lib/types";
+import type { Food, FoodDraft, Meal, NutrientKey, Nutrients } from "@/lib/types";
 import { MEALS, NUTRIENT_KEYS } from "@/lib/types";
 
 type Result = { ok: true } | { ok: false, error: string };
@@ -28,24 +28,46 @@ function cleanNutrients(d: Partial<Record<NutrientKey, unknown>>) {
 }
 
 function snapshot(food: Pick<Food, "name" | "brand" | "serving_label"> & Record<NutrientKey, number | null>, servings: number) {
-  const scaled = scale(
-    {
-      kcal: Number(food.kcal),
-      protein_g: Number(food.protein_g),
-      carbs_g: Number(food.carbs_g),
-      fat_g: Number(food.fat_g),
-      sat_fat_g: food.sat_fat_g,
-      sugar_g: food.sugar_g,
-      fiber_g: food.fiber_g,
-      salt_g: food.salt_g,
-    },
-    servings,
-  );
+  const per = Object.fromEntries(
+    NUTRIENT_KEYS.map((k) => [k, food[k] === null || food[k] === undefined ? null : Number(food[k])]),
+  ) as unknown as Nutrients;
   return {
     name: food.brand ? `${food.name} (${food.brand})` : food.name,
     serving_label: food.serving_label,
-    ...scaled,
+    ...scale(per, servings),
   };
+}
+
+/** Turn the form's draft into a foods row, or explain what's missing. */
+function foodRow(userId: string, draft: FoodDraft, share: boolean) {
+  const name = draft.name.trim();
+  if (!name) return { ok: false as const, error: "Give the food a name." };
+  return {
+    ok: true as const,
+    row: {
+      created_by: userId,
+      name: name.slice(0, 200),
+      brand: draft.brand.trim() || null,
+      serving_label: draft.serving_label.trim() || "1 serving",
+      barcode: draft.barcode?.trim() || null,
+      source: draft.source,
+      label_photo_path:
+        draft.label_photo_path && draft.label_photo_path.startsWith(userId + "/") ? draft.label_photo_path : null,
+      status: share ? ("pending" as const) : ("private" as const),
+      ...cleanNutrients(draft),
+    },
+  };
+}
+
+/** Save a new food without logging it: to your own foods, or sent for review if shared. */
+export async function createFood(input: { draft: FoodDraft; share: boolean }): Promise<Result> {
+  const { supabase, user } = await requireUser();
+  const r = foodRow(user.id, input.draft, input.share);
+  if (!r.ok) return r;
+  const { error } = await supabase.from("foods").insert(r.row);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 /** Save a new food (private, or sent for review if shared) and log it. */
@@ -61,24 +83,9 @@ export async function createFoodAndLog(input: {
   const bad = checkLogArgs(meal, date, servings);
   if (bad) return { ok: false, error: bad };
 
-  const name = draft.name.trim();
-  if (!name) return { ok: false, error: "Give the food a name." };
-
-  const nutrients = cleanNutrients(draft);
-  const row = {
-    created_by: user.id,
-    name: name.slice(0, 200),
-    brand: draft.brand.trim() || null,
-    serving_label: draft.serving_label.trim() || "1 serving",
-    barcode: draft.barcode?.trim() || null,
-    source: draft.source,
-    label_photo_path:
-      draft.label_photo_path && draft.label_photo_path.startsWith(user.id + "/")
-        ? draft.label_photo_path
-        : null,
-    status: share ? ("pending" as const) : ("private" as const),
-    ...nutrients,
-  };
+  const r = foodRow(user.id, draft, share);
+  if (!r.ok) return r;
+  const row = r.row;
 
   const { data: food, error } = await supabase.from("foods").insert(row).select().single();
   if (error || !food) return { ok: false, error: error?.message ?? "Could not save the food." };

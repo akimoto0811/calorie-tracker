@@ -27,7 +27,7 @@ export default async function Library({
 
   let query = supabase.from("foods").select("*").order("name").limit(100);
   if (filter === "mine") {
-    query = query.eq("created_by", user.id).neq("status", "private");
+    query = query.eq("created_by", user.id);
   } else {
     query = query.eq("status", "approved");
   }
@@ -109,7 +109,7 @@ export default async function Library({
               {q
                 ? `Nothing matches “${q}”.`
                 : filter === "mine"
-                  ? "You haven't shared any foods yet. Tick “Share with the food library” when you add one."
+                  ? "You haven't added any foods yet. Use “Add a new food” below, then “Save to library only” if you don't want to log it."
                   : "The library is empty so far. Foods appear here once a friend approves them."}
             </p>
           </div>
@@ -127,6 +127,7 @@ export default async function Library({
                     <span className="tag">{SOURCE_LABEL[f.source]}</span>
                     <span className="tag">by {f.created_by === user.id ? "you" : names[f.created_by] ?? "a friend"}</span>
                     {f.status === "pending" && <span className="tag warn">Waiting for review</span>}
+                    {f.status === "private" && <span className="tag">Only you</span>}
                     {f.status === "rejected" && (
                       <span className="tag warn" title={f.review_note ?? undefined}>
                         Not approved{f.review_note ? `: ${f.review_note}` : ""}

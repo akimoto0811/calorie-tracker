@@ -1,10 +1,10 @@
 "use client";
 
+import { NutritionTable } from "@/components/NutritionTable";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { reviewFood } from "@/app/actions";
-import { fmt } from "@/lib/nutrition";
-import { CORE_NUTRIENTS, EXTRA_NUTRIENTS, NUTRIENT_LABEL, type Food, type NutrientKey } from "@/lib/types";
+import { NUTRIENT_KEYS, NUTRIENT_LABEL, type Food, type NutrientKey } from "@/lib/types";
 import { Alert, Check } from "@/components/icons";
 
 const SOURCE_LABEL = { manual: "Entered by hand", label: "Read from label photo", barcode: "From barcode" } as const;
@@ -29,7 +29,7 @@ export function ReviewCard({
     brand: food.brand ?? "",
     serving_label: food.serving_label,
     ...Object.fromEntries(
-      [...CORE_NUTRIENTS, ...EXTRA_NUTRIENTS].map((k) => [k, food[k] === null ? "" : String(food[k])]),
+      NUTRIENT_KEYS.map((k) => [k, food[k] === null ? "" : String(food[k])]),
     ),
   } as Record<string, string>);
   const [note, setNote] = useState("");
@@ -56,7 +56,6 @@ export function ReviewCard({
     });
   }
 
-  const extras = EXTRA_NUTRIENTS.filter((k) => food[k] !== null);
 
   return (
     <>
@@ -103,7 +102,7 @@ export function ReviewCard({
                 />
               </div>
             ))}
-            {[...CORE_NUTRIENTS, ...EXTRA_NUTRIENTS].map((k) => (
+            {NUTRIENT_KEYS.map((k) => (
               <div key={k} className="field">
                 <label htmlFor={`r-${k}`} className="label">
                   {NUTRIENT_LABEL[k]}
@@ -119,18 +118,7 @@ export function ReviewCard({
             ))}
           </div>
         ) : (
-          <div>
-            <div className="nrow"><span>Calories</span><b>{fmt(food.kcal)} kcal</b></div>
-            <div className="nrow"><span>Protein</span><b>{fmt(food.protein_g, 1)} g</b></div>
-            <div className="nrow"><span>Carbs</span><b>{fmt(food.carbs_g, 1)} g</b></div>
-            <div className="nrow"><span>Fat</span><b>{fmt(food.fat_g, 1)} g</b></div>
-            {extras.map((k) => (
-              <div key={k} className="nrow">
-                <span>{NUTRIENT_LABEL[k].replace(" (g)", "")}</span>
-                <b>{fmt(food[k], 1)} g</b>
-              </div>
-            ))}
-          </div>
+          <NutritionTable values={food} />
         )}
 
         {similar && (
