@@ -157,6 +157,35 @@ export async function relog(input: { logId: string; meal: Meal; date: string }):
   return { ok: true };
 }
 
+/** Change how much you had, or which meal it was, for one log entry. Every nutrient is rescaled. */
+export async function updateLog(input: { id: string; servings: number; meal: Meal }): Promise<Result> {
+  const { supabase } = await requireUser();
+  if (!MEALS.includes(input.meal)) return { ok: false, error: "Pick a meal." };
+  if (!(input.servings > 0 && input.servings <= 100)) return { ok: false, error: "Amount must be more than 0." };
+  const { data: prev } = await supabase.from("food_logs").select("*").eq("id", input.id).maybeSingle();
+  if (!prev) return { ok: false, error: "Entry not found." };
+  const old = Number(prev.servings) || 1;
+  const per = Object.fromEntries(
+    NUTRIENT_KEYS.map((k) => [k, prev[k] === null || prev[k] === undefined ? null : Number(prev[k]) / old]),
+  ) as unknown as Nutrients;
+  const { error } = await supabase
+    .from("food_logs")
+    .update({ meal: input.meal, servings: input.servings, ...scale(per, input.servings) })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Remove one log entry (from its details page). */
+export async function removeLog(id: string): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("food_logs").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 export async function deleteLog(formData: FormData) {
   const { supabase } = await requireUser();
   const id = String(formData.get("id") ?? "");

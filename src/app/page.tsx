@@ -137,14 +137,16 @@ export default async function Dashboard({
                   const { name, brand } = splitBrand(l.name);
                   return (
                     <div key={l.id} className="meal-row">
-                      <div className="meal-row-text">
-                        <span className="meal-row-name">{name}</span>
-                        <span className="meal-row-sub">
-                          {brand ? `${brand} · ` : ""}
-                          {eatenText(l.serving_label, Number(l.servings))}
+                      <Link href={`/log/${l.id}`} className="meal-row-link">
+                        <span className="meal-row-text">
+                          <span className="meal-row-name">{name}</span>
+                          <span className="meal-row-sub">
+                            {brand ? `${brand} · ` : ""}
+                            {eatenText(l.serving_label, Number(l.servings))}
+                          </span>
                         </span>
-                      </div>
-                      <span className="meal-row-kcal">{fmt(l.kcal)}</span>
+                        <span className="meal-row-kcal">{fmt(l.kcal)}</span>
+                      </Link>
                       <form action={deleteLog}>
                         <input type="hidden" name="id" value={l.id} />
                         <button className="meal-del" aria-label={`Remove ${l.name}`}>
