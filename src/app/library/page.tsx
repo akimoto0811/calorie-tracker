@@ -6,7 +6,7 @@ import type { Food } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { ChevronRight, Plus, Search } from "@/components/icons";
 import { deleteFood } from "../actions";
-import { LibrarySearch } from "./LibrarySearch";
+import { LiveSearch } from "@/components/LiveSearch";
 
 const SOURCE_LABEL = { manual: "Manual", label: "Label photo", barcode: "Barcode" } as const;
 const FILTERS = [
@@ -89,7 +89,7 @@ export default async function Library({
             padding: "10px 20px 12px",
           }}
         >
-          <LibrarySearch filter={filter} initial={q} />
+          <LiveSearch path="/library" params={{ f: filter }} initial={q} id="lq" placeholder="Search foods, brands or barcodes" />
           <nav className="chips" aria-label="Filter">
             {FILTERS.map((f) => (
               <Link

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
+import { LiveSearch } from "@/components/LiveSearch";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
 import { amountText, fmt } from "@/lib/nutrition";
 import { MEALS, MEAL_LABEL, type Food, type LogEntry } from "@/lib/types";
-import { Barcode, Camera, ChevronRight, Close, Pencil, Search } from "@/components/icons";
+import { Barcode, Camera, ChevronRight, Close, Pencil } from "@/components/icons";
 import { QuickAdd } from "@/components/QuickAdd";
 
 export default async function AddFood({ searchParams }: { searchParams: AddSearchParams }) {
@@ -103,17 +104,14 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
         </Link>
       </div>
 
-      <form action="/add" className="stack" style={{ gap: 8 }} role="search">
-        <input type="hidden" name="meal" value={meal} />
-        {date !== today && <input type="hidden" name="date" value={date} />}
-        <label htmlFor="q" style={{ fontSize: 14, fontWeight: 600 }}>
-          Or search the shared library
-        </label>
-        <div className="search">
-          <Search className="muted" />
-          <input id="q" name="q" type="search" defaultValue={q} placeholder="e.g. oat milk, chicken breast" />
-        </div>
-      </form>
+      <LiveSearch
+        path="/add"
+        params={date !== today ? { meal, date } : { meal }}
+        initial={q}
+        id="q"
+        label="Or search the shared library"
+        placeholder="e.g. oat milk, chicken breast"
+      />
 
       {q && (
         <section className="stack" style={{ gap: 8 }}>
