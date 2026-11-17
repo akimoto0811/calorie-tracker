@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
-import { LiveSearch } from "@/components/LiveSearch";
+import { searchToLog } from "@/lib/librarySearch";
+import { AddSearch } from "./AddSearch";
 import { readAddParams, type AddSearchParams } from "@/lib/addParams";
 import { amountText, fmt } from "@/lib/nutrition";
-import { MEALS, MEAL_LABEL, type Food, type LogEntry } from "@/lib/types";
+import { MEALS, MEAL_LABEL, type LogEntry } from "@/lib/types";
 import { Barcode, Camera, ChevronRight, Close, Pencil } from "@/components/icons";
 import { QuickAdd } from "@/components/QuickAdd";
 
@@ -12,19 +13,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
   const { meal, date, today, q, qs } = await readAddParams(searchParams);
   const dateQs = date !== today ? `&date=${date}` : "";
 
-  let results: Food[] = [];
-  if (q) {
-    const term = `*${q.replace(/[%_*,().]/g, " ").trim()}*`;
-    const { data } = await supabase
-      .from("foods")
-      .select("*")
-      .or(`status.eq.approved,created_by.eq.${user.id}`)
-      .neq("status", "rejected")
-      .or(`name.ilike.${term},local_name.ilike.${term},brand.ilike.${term}`)
-      .order("name")
-      .limit(25);
-    results = (data ?? []) as Food[];
-  }
+  const results = await searchToLog(supabase, user.id, q);
 
   // Recent: the last distinct things you logged.
   const { data: recentRows } = await supabase
@@ -85,7 +74,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
           <div className="grow">
             <div style={{ fontWeight: 700, fontSize: 16 }}>Snap nutrition label</div>
             <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>
-              Take a photo and we read it for you
+              Take or upload a photo and we read it for you
             </div>
           </div>
           <ChevronRight size={18} className="muted" />
@@ -104,47 +93,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
         </Link>
       </div>
 
-      <LiveSearch
-        path="/add"
-        params={date !== today ? { meal, date } : { meal }}
-        initial={q}
-        id="q"
-        label="Or search the shared library"
-        placeholder="e.g. oat milk, chicken breast"
-      />
-
-      {q && (
-        <section className="stack" style={{ gap: 8 }}>
-          <h2 className="muted" style={{ fontSize: 14, fontFamily: "var(--font)", fontWeight: 600 }}>
-            Results for “{q}”
-          </h2>
-          {results.length === 0 ? (
-            <p className="muted small">
-              Nothing found. <Link href={`/add/manual?${qs}`}>Add it yourself</Link>
-            </p>
-          ) : (
-            <div className="list">
-              {results.map((f) => (
-                <Link
-                  key={f.id}
-                  href={`/add/food/${f.id}?${qs}`}
-                  className="row"
-                  style={{ textDecoration: "none", color: "var(--text)" }}
-                >
-                  <div className="grow">
-                    <div style={{ fontWeight: 600 }}>{f.name}</div>
-                    <div className="muted small">
-                      {fmt(f.kcal)} kcal · {f.serving_label}
-                      {f.brand ? ` · ${f.brand}` : ""}
-                    </div>
-                  </div>
-                  <ChevronRight size={18} className="muted" />
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+      <AddSearch initialQ={q} initial={results} qs={qs} />
 
       {recent.length > 0 && (
         <section className="stack" style={{ gap: 8 }}>

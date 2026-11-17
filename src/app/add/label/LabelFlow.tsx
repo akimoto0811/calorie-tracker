@@ -5,7 +5,7 @@ import { shrink } from "@/lib/image";
 import { createClient } from "@/lib/supabase/client";
 import { FoodForm } from "@/components/FoodForm";
 import { EXTRA_NUTRIENTS, emptyDraft, type FoodDraft, type Meal } from "@/lib/types";
-import { Alert, Camera, Check } from "@/components/icons";
+import { Alert, Camera, Check, ImageIcon } from "@/components/icons";
 import type { LabelReading } from "@/lib/ai/types";
 
 type Phase =
@@ -17,6 +17,8 @@ type Phase =
 /** Shrinks a photo to at most 1600 px on the long side, as JPEG, so uploads are quick. */
 export function LabelFlow({ userId, meal, date, today }: { userId: string; meal: Meal; date: string; today: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Same picker without the camera, for a photo already on the phone.
+  const libraryRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
 
   async function read(path: string, preview: string) {
@@ -77,17 +79,29 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
   }
 
   const picker = (
-    <input
-      ref={inputRef}
-      type="file"
-      accept="image/*"
-      capture="environment"
-      className="sr-only"
-      onChange={(e) => {
-        onFile(e.target.files?.[0]);
-        e.target.value = "";
-      }}
-    />
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={libraryRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+    </>
   );
 
   if (phase.kind === "review") {
@@ -108,9 +122,14 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
                 : `${phase.provider} filled these in. Fix anything that looks off before you save.`}
               {phase.note ? ` ${phase.note}` : ""}
             </div>
-            <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => inputRef.current?.click()}>
-              Retake photo
-            </button>
+            <div style={{ display: "flex", gap: 16 }}>
+              <button type="button" className="link-btn" onClick={() => inputRef.current?.click()}>
+                Retake photo
+              </button>
+              <button type="button" className="link-btn" onClick={() => libraryRef.current?.click()}>
+                Choose another
+              </button>
+            </div>
           </div>
         </div>
         <FoodForm
@@ -144,6 +163,10 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
               Get the whole nutrition table in frame, flat and in good light.
             </span>
           </button>
+          <button type="button" className="btn btn-secondary" onClick={() => libraryRef.current?.click()}>
+            <ImageIcon size={20} />
+            Upload a photo instead
+          </button>
           <p className="muted small" style={{ textAlign: "center" }}>
             The photo is saved with the food so friends can check the numbers.
           </p>
@@ -172,6 +195,9 @@ export function LabelFlow({ userId, meal, date, today }: { userId: string; meal:
           )}
           <button type="button" className="btn btn-secondary" onClick={() => inputRef.current?.click()}>
             Take another photo
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => libraryRef.current?.click()}>
+            Upload a photo instead
           </button>
           <button
             type="button"

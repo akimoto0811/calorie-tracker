@@ -60,6 +60,13 @@ export const Camera = (p: P) => (
     <circle cx="12" cy="13" r="3.5" />
   </svg>
 );
+export const ImageIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <circle cx="9" cy="10" r="2" />
+    <path d="M21 16l-5-5-9 9" />
+  </svg>
+);
 export const Pencil = (p: P) => (
   <svg {...base(p)}>
     <path d="M4 20h4L19 9l-4-4L4 16z" />
