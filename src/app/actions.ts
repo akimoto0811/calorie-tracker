@@ -343,11 +343,59 @@ export async function importFoods(
     return {
       ok: false,
       error: missing
-        ? "The database needs an update first: re-run supabase/schema.sql in the Supabase SQL Editor."
+        ? `The database needs an update first: run the latest supabase/schema.sql from GitHub in the Supabase SQL Editor. (${error.message})`
         : error.message,
     };
   }
   revalidatePath("/", "layout");
   const res = (data ?? {}) as { added?: number; skipped?: string[] };
   return { ok: true, added: res.added ?? 0, skipped: res.skipped ?? [] };
+}
+
+export type SimilarFood = Pick<Food, "id" | "name" | "local_name" | "brand" | "serving_label" | "kcal" | "status">;
+
+/**
+ * Library foods that look like the one being added: same barcode, or a name
+ * (English or original) that contains every word typed. At most 3.
+ */
+export async function findSimilarFoods(input: {
+  name: string;
+  local_name?: string;
+  barcode?: string | null;
+}): Promise<SimilarFood[]> {
+  const { supabase } = await requireUser();
+  const cols = "id, name, local_name, brand, serving_label, kcal, status";
+  const clean = (s: string) => s.replace(/[%_*,().:"\\]/g, " ").trim();
+  const words = (s: string) =>
+    clean(s)
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 || /[^\x00-\x7f]/.test(w))
+      .slice(0, 5);
+
+  const queries = [];
+  const code = cleanBarcode(input.barcode);
+  if (code) queries.push(supabase.from("foods").select(cols).in("status", ["approved", "pending"]).eq("barcode", code).limit(3));
+  for (const [col, text] of [
+    ["name", input.name],
+    ["local_name", input.local_name ?? ""],
+  ] as const) {
+    const ws = words(text);
+    if (ws.length === 0) continue;
+    let q = supabase.from("foods").select(cols).in("status", ["approved", "pending"]);
+    for (const w of ws) q = q.ilike(col, `%${w}%`);
+    queries.push(q.limit(3));
+  }
+  if (queries.length === 0) return [];
+  const results = await Promise.all(queries);
+  const seen = new Set<string>();
+  const out: SimilarFood[] = [];
+  for (const { data } of results) {
+    for (const f of (data ?? []) as SimilarFood[]) {
+      if (!seen.has(f.id) && out.length < 3) {
+        seen.add(f.id);
+        out.push(f);
+      }
+    }
+  }
+  return out;
 }
