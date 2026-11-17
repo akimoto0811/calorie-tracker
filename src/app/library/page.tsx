@@ -34,13 +34,18 @@ export default async function Library({
   if (filter === "barcode") query = query.not("barcode", "is", null);
   if (q) {
     const term = `*${q.replace(/[%_*,().]/g, " ").trim()}*`;
-    query = query.or(`name.ilike.${term},local_name.ilike.${term},brand.ilike.${term}`);
+    query = query.or(`name.ilike.${term},local_name.ilike.${term},brand.ilike.${term},barcode.ilike.${term}`);
   }
 
-  const [{ data }, reviewCount, admin] = await Promise.all([
-    query,
+  // The shared library is long, so its foods only show once you search. "Added by me" always lists.
+  const browse = filter === "mine" || q !== "";
+  const [{ data }, reviewCount, admin, total] = await Promise.all([
+    browse ? query : Promise.resolve({ data: [] as Food[] }),
     getReviewCount(supabase, user.id),
     amIAdmin(supabase),
+    browse
+      ? Promise.resolve(null)
+      : supabase.from("foods").select("id", { count: "exact", head: true }).eq("status", "approved").then((r) => r.count),
   ]);
   const foods = (data ?? []) as Food[];
   const [names, photos] = await Promise.all([
@@ -77,7 +82,7 @@ export default async function Library({
             <label htmlFor="lq" className="sr-only">
               Search foods
             </label>
-            <input id="lq" name="q" type="search" defaultValue={q} placeholder="Search foods" />
+            <input id="lq" name="q" type="search" defaultValue={q} placeholder="Search foods, brands or barcodes" />
           </div>
         </form>
 
@@ -121,7 +126,15 @@ export default async function Library({
           </Link>
         )}
 
-        {foods.length === 0 ? (
+        {!browse ? (
+          <div className="card" style={{ alignItems: "center", textAlign: "center", gap: 6 }}>
+            <Search className="muted" />
+            <p style={{ fontWeight: 600 }}>
+              {total ? `${total.toLocaleString("en-GB")} foods in the library` : "Search the library"}
+            </p>
+            <p className="muted small">Type a food, brand or barcode above to find it.</p>
+          </div>
+        ) : foods.length === 0 ? (
           <div className="card" style={{ alignItems: "center", textAlign: "center" }}>
             <p className="muted">
               {q

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createFood, createFoodAndLog, updateFood } from "@/app/actions";
+import { createFood, createFoodAndLog, findSimilarFoods, updateFood, type SimilarFood } from "@/app/actions";
 import { amountText, fmt } from "@/lib/nutrition";
 import {
   CORE_NUTRIENTS,
@@ -101,6 +102,28 @@ export function FoodForm({
       ),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Foods already in the library that look like this one, so nobody adds the same food twice.
+  const [similar, setSimilar] = useState<SimilarFood[]>([]);
+  useEffect(() => {
+    if (edit) return;
+    const name = draft.name.trim();
+    const local = draft.local_name.trim();
+    if (name.length < 3 && !local && !draft.barcode) {
+      setSimilar([]);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      findSimilarFoods({ name, local_name: local, barcode: draft.barcode })
+        .then((r) => live && setSimilar(r))
+        .catch(() => {});
+    }, 600);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [edit, draft.name, draft.local_name, draft.barcode]);
 
   const flaggedList = useMemo(() => [...flagged] as Field[], [flagged]);
 
@@ -261,6 +284,33 @@ export function FoodForm({
           {input("local_name", { placeholder: "Optional, e.g. 고래밥", autoComplete: "off", lang: "" })}
         </div>
         <div className="span2">{input("brand", { placeholder: "Optional", autoComplete: "off" })}</div>
+        {similar.length > 0 && (
+          <div className="span2 notice warn" role="status" style={{ flexDirection: "column", gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>
+              {similar.length === 1 ? "A similar food is" : "Similar foods are"} already in the library
+            </div>
+            {similar.map((f) => (
+              <Link
+                key={f.id}
+                href={`/add/food/${f.id}?meal=${meal}${date !== today ? `&date=${date}` : ""}`}
+                style={{ display: "flex", gap: 8, alignItems: "center", color: "inherit", textDecoration: "none" }}
+              >
+                <span className="grow" style={{ minWidth: 0 }}>
+                  <span style={{ fontWeight: 600 }}>{f.name}</span>
+                  <span style={{ opacity: 0.8 }}>
+                    {" "}
+                    · {[f.local_name, f.brand, `${fmt(Number(f.kcal))} kcal / ${f.serving_label}`]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    {f.status === "pending" ? " · waiting for review" : ""}
+                  </span>
+                </span>
+                <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Use this</span>
+              </Link>
+            ))}
+            <div style={{ opacity: 0.8 }}>If yours is different, carry on below.</div>
+          </div>
+        )}
         <div className="span2">
           <ServingInput
             value={draft.serving_label}
