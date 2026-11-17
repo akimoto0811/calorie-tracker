@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { deleteFood } from "@/app/actions";
 import { searchLibrary } from "@/app/search";
 import { fmt } from "@/lib/nutrition";
+import { foodTitle } from "@/lib/foodName";
 import type { LibraryData, LibraryFilter } from "@/lib/librarySearch";
 import { Plus, Search } from "@/components/icons";
 import { SearchInput } from "@/components/SearchInput";
@@ -124,10 +125,10 @@ export function LibraryBrowser({
               )}
               <div className="grow stack" style={{ gap: 4 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.3 }}>{f.name}</div>
-                  {(f.local_name || f.brand) && (
+                  <div style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.3 }}>{foodTitle(f, q).title}</div>
+                  {(foodTitle(f, q).other || f.brand) && (
                     <div className="muted" style={{ fontSize: 13, lineHeight: 1.35 }}>
-                      {[f.local_name, f.brand].filter(Boolean).join(" · ")}
+                      {[foodTitle(f, q).other, f.brand].filter(Boolean).join(" · ")}
                     </div>
                   )}
                 </div>
