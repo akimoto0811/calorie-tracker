@@ -8,7 +8,7 @@ import type { ImportFood } from "@/lib/foodImport";
 import type { Food, FoodDraft, Meal, NutrientKey, Nutrients } from "@/lib/types";
 import { ACTIVITIES, MEALS, NUTRIENT_KEYS } from "@/lib/types";
 
-type Result = { ok: true } | { ok: false, error: string };
+type Result = { ok: true } | { ok: false; error: string };
 
 function checkLogArgs(meal: Meal, date: string, servings: number): string | null {
   if (!MEALS.includes(meal)) return "Pick a meal.";
@@ -28,7 +28,10 @@ function cleanNutrients(d: Partial<Record<NutrientKey, unknown>>) {
   return out;
 }
 
-function snapshot(food: Pick<Food, "name" | "brand" | "serving_label"> & Record<NutrientKey, number | null>, servings: number) {
+function snapshot(
+  food: Pick<Food, "name" | "brand" | "serving_label"> & Record<NutrientKey, number | null>,
+  servings: number,
+) {
   const per = Object.fromEntries(
     NUTRIENT_KEYS.map((k) => [k, food[k] === null || food[k] === undefined ? null : Number(food[k])]),
   ) as unknown as Nutrients;
@@ -117,12 +120,7 @@ export async function createFoodAndLog(input: {
 }
 
 /** Log a food that already exists (yours, or from the library). */
-export async function logFood(input: {
-  foodId: string;
-  servings: number;
-  meal: Meal;
-  date: string;
-}): Promise<Result> {
+export async function logFood(input: { foodId: string; servings: number; meal: Meal; date: string }): Promise<Result> {
   const { supabase, user } = await requireUser();
   const bad = checkLogArgs(input.meal, input.date, input.servings);
   if (bad) return { ok: false, error: bad };
@@ -154,6 +152,35 @@ export async function relog(input: { logId: string; meal: Meal; date: string }):
   const { error } = await supabase
     .from("food_logs")
     .insert({ ...rest, user_id: user.id, meal: input.meal, logged_on: input.date });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Change how much you had, or which meal it was, for one log entry. Every nutrient is rescaled. */
+export async function updateLog(input: { id: string; servings: number; meal: Meal }): Promise<Result> {
+  const { supabase } = await requireUser();
+  if (!MEALS.includes(input.meal)) return { ok: false, error: "Pick a meal." };
+  if (!(input.servings > 0 && input.servings <= 100)) return { ok: false, error: "Amount must be more than 0." };
+  const { data: prev } = await supabase.from("food_logs").select("*").eq("id", input.id).maybeSingle();
+  if (!prev) return { ok: false, error: "Entry not found." };
+  const old = Number(prev.servings) || 1;
+  const per = Object.fromEntries(
+    NUTRIENT_KEYS.map((k) => [k, prev[k] === null || prev[k] === undefined ? null : Number(prev[k]) / old]),
+  ) as unknown as Nutrients;
+  const { error } = await supabase
+    .from("food_logs")
+    .update({ meal: input.meal, servings: input.servings, ...scale(per, input.servings) })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Remove one log entry (from its details page). */
+export async function removeLog(id: string): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("food_logs").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");
   return { ok: true };
@@ -204,7 +231,9 @@ export async function saveGoals(_prev: unknown, formData: FormData) {
 
 export async function inviteFriend(_prev: unknown, formData: FormData) {
   const { supabase, user } = await requireUser();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { ok: false, message: "That doesn't look like an email address." };
   }
@@ -279,7 +308,9 @@ export async function deleteFood(formData: FormData) {
 
 export async function updateName(_prev: unknown, formData: FormData) {
   const { supabase, user } = await requireUser();
-  const name = String(formData.get("display_name") ?? "").trim().slice(0, 60);
+  const name = String(formData.get("display_name") ?? "")
+    .trim()
+    .slice(0, 60);
   if (!name) return { ok: false, message: "Your name can't be empty." };
   const { error } = await supabase.from("profiles").update({ display_name: name }).eq("id", user.id);
   if (error) return { ok: false, message: error.message };
@@ -319,23 +350,44 @@ export async function undoWater(input: { date: string }): Promise<Result> {
  */
 export async function importFoods(
   foods: ImportFood[],
-): Promise<{ ok: true; added: number; skipped: string[] } | { ok: false; error: string }> {
+  /** The sheet's columns. On an update, only these change; anything not in the sheet is kept. */
+  columns: string[],
+): Promise<
+  { ok: true; added: number; updated: number; skipped: string[]; missing: string[] } | { ok: false; error: string }
+> {
   const { supabase, user } = await requireUser();
   if (!Array.isArray(foods) || foods.length === 0) return { ok: false, error: "No foods to add." };
   if (foods.length > 500) return { ok: false, error: "Send up to 500 foods at a time." };
+  const has = new Set(Array.isArray(columns) ? columns : []);
   const items = foods.map((f) => {
+    const item: Record<string, unknown> = {};
+    if (f.id) item.id = String(f.id);
+    item.name = String(f.name ?? "")
+      .trim()
+      .slice(0, 200);
+    if (has.has("local_name"))
+      item.local_name = String(f.local_name ?? "")
+        .trim()
+        .slice(0, 200);
+    if (has.has("brand"))
+      item.brand = String(f.brand ?? "")
+        .trim()
+        .slice(0, 200);
+    if (has.has("serving_label"))
+      item.serving_label = String(f.serving_label ?? "")
+        .trim()
+        .slice(0, 100);
+    if (has.has("barcode")) item.barcode = cleanBarcode(f.barcode) || "";
+    // A photo must be one you uploaded (it sits in your own folder).
+    if (f.photo_path && f.photo_path.startsWith(user.id + "/")) item.photo_path = f.photo_path;
+    // Nutrients in the sheet: a number, or null to clear it.
     const nutrients = cleanNutrients(f);
-    return {
-      name: String(f.name ?? "").trim().slice(0, 200),
-      local_name: String(f.local_name ?? "").trim().slice(0, 200),
-      brand: String(f.brand ?? "").trim().slice(0, 200),
-      serving_label: String(f.serving_label ?? "").trim().slice(0, 100),
-      barcode: cleanBarcode(f.barcode) || "",
-      // A photo must be one you uploaded (it sits in your own folder).
-      photo_path: f.photo_path && f.photo_path.startsWith(user.id + "/") ? f.photo_path : "",
-      // Leave out empty nutrients so they stay blank.
-      ...Object.fromEntries(Object.entries(nutrients).filter(([, v]) => v !== null)),
-    };
+    for (const k of NUTRIENT_KEYS) {
+      if (!has.has(k)) continue;
+      const v = f[k];
+      item[k] = v === null || v === undefined ? null : nutrients[k];
+    }
+    return item;
   });
   const { data, error } = await supabase.rpc("import_foods", { items });
   if (error) {
@@ -348,8 +400,29 @@ export async function importFoods(
     };
   }
   revalidatePath("/", "layout");
-  const res = (data ?? {}) as { added?: number; skipped?: string[] };
-  return { ok: true, added: res.added ?? 0, skipped: res.skipped ?? [] };
+  const res = (data ?? {}) as { added?: number; updated?: number; skipped?: string[]; missing?: string[] };
+  return {
+    ok: true,
+    added: res.added ?? 0,
+    updated: res.updated ?? 0,
+    skipped: res.skipped ?? [],
+    missing: res.missing ?? [],
+  };
+}
+
+/** The current version of foods in an uploaded sheet, to show what will change. */
+export async function foodsByIds(ids: string[]): Promise<Food[]> {
+  const { supabase } = await requireUser();
+  const clean = (Array.isArray(ids) ? ids : []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 2000);
+  const out: Food[] = [];
+  for (let i = 0; i < clean.length; i += 200) {
+    const { data } = await supabase
+      .from("foods")
+      .select("*")
+      .in("id", clean.slice(i, i + 200));
+    out.push(...((data ?? []) as Food[]));
+  }
+  return out;
 }
 
 export type SimilarFood = Pick<Food, "id" | "name" | "local_name" | "brand" | "serving_label" | "kcal" | "status">;
@@ -374,7 +447,10 @@ export async function findSimilarFoods(input: {
 
   const queries = [];
   const code = cleanBarcode(input.barcode);
-  if (code) queries.push(supabase.from("foods").select(cols).in("status", ["approved", "pending"]).eq("barcode", code).limit(3));
+  if (code)
+    queries.push(
+      supabase.from("foods").select(cols).in("status", ["approved", "pending"]).eq("barcode", code).limit(3),
+    );
   for (const [col, text] of [
     ["name", input.name],
     ["local_name", input.local_name ?? ""],
@@ -398,4 +474,34 @@ export async function findSimilarFoods(input: {
     }
   }
   return out;
+}
+
+/** Approve or reject many waiting foods at once. Each one follows the usual review rules. */
+export async function reviewFoods(input: {
+  ids: string[];
+  decision: "approve" | "reject";
+  note?: string | null;
+}): Promise<{ ok: true; done: number; failed: string[] } | { ok: false; error: string }> {
+  const { supabase } = await requireUser();
+  if (input.decision !== "approve" && input.decision !== "reject")
+    return { ok: false, error: "Pick approve or reject." };
+  const ids = (Array.isArray(input.ids) ? input.ids : []).slice(0, 500);
+  if (ids.length === 0) return { ok: false, error: "Tick at least one food." };
+  let done = 0;
+  const failed: string[] = [];
+  for (let i = 0; i < ids.length; i += 10) {
+    const results = await Promise.all(
+      ids.slice(i, i + 10).map((id) =>
+        supabase.rpc("review_food", {
+          food_id: id,
+          decision: input.decision,
+          fixes: null,
+          note: input.decision === "reject" ? (input.note ?? "").trim() || null : null,
+        }),
+      ),
+    );
+    results.forEach((r, j) => (r.error ? failed.push(ids[i + j]) : done++));
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, done, failed };
 }

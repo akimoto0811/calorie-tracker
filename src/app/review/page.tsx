@@ -3,7 +3,6 @@ import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { amIAdmin, getNames, signedPhotoUrl } from "@/lib/queries";
 import type { Food } from "@/lib/types";
-import { ChevronLeft } from "@/components/icons";
 import { ReviewCard } from "./ReviewCard";
 
 function ago(iso: string) {
@@ -63,6 +62,12 @@ export default async function ReviewQueue() {
           </div>
         </div>
       </header>
+
+      {queue.length > 1 && (
+        <Link href="/review/all" className="btn btn-secondary" style={{ height: 44, fontSize: 15 }}>
+          Review many at once ({queue.length === 50 ? "50+" : queue.length})
+        </Link>
+      )}
 
       {queue.length > 1 && queue.length <= 12 && (
         <div style={{ display: "flex", gap: 6 }} aria-hidden="true">
