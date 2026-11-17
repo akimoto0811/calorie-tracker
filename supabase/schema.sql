@@ -599,6 +599,83 @@ $$;
 
 revoke all on function public.update_food(uuid, jsonb, boolean) from public, anon;
 grant execute on function public.update_food(uuid, jsonb, boolean) to authenticated;
+-- ───────────────────────────── Bulk upload ─────────────────────────────
+-- The app owner can add many foods at once from a spreadsheet. They go live straight away.
+-- A food with the same name and brand as one already in the library is skipped.
+create or replace function public.import_foods(items jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  item jsonb;
+  r public.foods;
+  nm text;
+  br text;
+  code text;
+  added int := 0;
+  skipped jsonb := '[]'::jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Not signed in';
+  end if;
+  if not coalesce((select is_admin from public.profiles where id = auth.uid()), false) then
+    raise exception 'Only the app owner can bulk upload foods';
+  end if;
+  if jsonb_typeof(items) <> 'array' or jsonb_array_length(items) > 500 then
+    raise exception 'Send up to 500 foods at a time';
+  end if;
+
+  for item in select value from jsonb_array_elements(items) loop
+    nm := left(trim(coalesce(item ->> 'name', '')), 200);
+    continue when nm = '';
+    br := nullif(trim(coalesce(item ->> 'brand', '')), '');
+    if exists (
+      select 1 from public.foods f
+      where f.status in ('approved', 'pending')
+        and lower(f.name) = lower(nm)
+        and lower(coalesce(f.brand, '')) = lower(coalesce(br, ''))
+    ) then
+      skipped := skipped || to_jsonb(nm || coalesce(' (' || br || ')', ''));
+      continue;
+    end if;
+    code := nullif(regexp_replace(coalesce(item ->> 'barcode', ''), '\D', '', 'g'), '');
+    if code is not null and code !~ '^\d{6,14}$' then
+      code := null;
+    end if;
+
+    -- Nutrient columns come straight from the item; everything else is set here.
+    r := jsonb_populate_record(null::public.foods, item);
+    r.id := gen_random_uuid();
+    r.created_by := auth.uid();
+    r.name := nm;
+    r.brand := br;
+    r.local_name := nullif(left(trim(coalesce(item ->> 'local_name', '')), 200), '');
+    r.serving_label := coalesce(nullif(left(trim(coalesce(item ->> 'serving_label', '')), 100), ''), '1 serving');
+    r.barcode := code;
+    r.source := 'manual';
+    r.label_photo_path := null;
+    r.photo_path := null;
+    r.status := 'approved';
+    r.reviewed_by := auth.uid();
+    r.reviewed_at := now();
+    r.review_note := null;
+    r.created_at := now();
+    r.kcal := coalesce(r.kcal, 0);
+    r.protein_g := coalesce(r.protein_g, 0);
+    r.carbs_g := coalesce(r.carbs_g, 0);
+    r.fat_g := coalesce(r.fat_g, 0);
+    insert into public.foods select r.*;
+    added := added + 1;
+  end loop;
+
+  return jsonb_build_object('added', added, 'skipped', skipped);
+end;
+$$;
+
+revoke all on function public.import_foods(jsonb) from public, anon;
+grant execute on function public.import_foods(jsonb) to authenticated;
 revoke all on function public.my_profile() from public, anon;
 grant execute on function public.my_profile() to authenticated;
 
