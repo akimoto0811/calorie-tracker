@@ -600,8 +600,10 @@ $$;
 revoke all on function public.update_food(uuid, jsonb, boolean) from public, anon;
 grant execute on function public.update_food(uuid, jsonb, boolean) to authenticated;
 -- ───────────────────────────── Bulk upload ─────────────────────────────
--- The app owner can add many foods at once from a spreadsheet. They go live straight away.
--- A food with the same name and brand as one already in the library is skipped.
+-- The app owner can add or change many foods at once from a spreadsheet. Changes go live straight away.
+-- A row with an "id" updates that food (even if its name changed). Columns left out of the row keep
+-- their old value; a nutrient sent as null is cleared.
+-- A row without an id is a new food, skipped if the library already has the same name and brand.
 -- Product photos are uploaded first by the app and passed in as photo_path.
 create or replace function public.import_foods(items jsonb)
 returns jsonb
@@ -612,11 +614,16 @@ as $$
 declare
   item jsonb;
   r public.foods;
+  f public.foods;
+  fid uuid;
   nm text;
   br text;
   code text;
+  num_set text;
   added int := 0;
+  updated int := 0;
   skipped jsonb := '[]'::jsonb;
+  missing jsonb := '[]'::jsonb;
 begin
   if auth.uid() is null then
     raise exception 'Not signed in';
@@ -628,26 +635,70 @@ begin
     raise exception 'Send up to 500 foods at a time';
   end if;
 
+  -- "kcal = ($1).kcal, protein_g = ($1).protein_g, …" for every nutrient column.
+  select string_agg(format('%I = ($1).%I', column_name, column_name), ', ')
+    into num_set
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'foods' and data_type = 'numeric';
+
   for item in select value from jsonb_array_elements(items) loop
-    nm := left(trim(coalesce(item ->> 'name', '')), 200);
-    continue when nm = '';
-    br := nullif(trim(coalesce(item ->> 'brand', '')), '');
-    if exists (
-      select 1 from public.foods f
-      where f.status in ('approved', 'pending')
-        and lower(f.name) = lower(nm)
-        and lower(coalesce(f.brand, '')) = lower(coalesce(br, ''))
-    ) then
-      skipped := skipped || to_jsonb(nm || coalesce(' (' || br || ')', ''));
-      continue;
-    end if;
     code := nullif(regexp_replace(coalesce(item ->> 'barcode', ''), '\D', '', 'g'), '');
     if code is not null and code !~ '^\d{6,14}$' then
       code := null;
     end if;
 
+    -- ── Update a food that's already in the library ──
+    if coalesce(item ->> 'id', '') <> '' then
+      begin
+        fid := (item ->> 'id')::uuid;
+      exception when others then
+        missing := missing || to_jsonb(item ->> 'id');
+        continue;
+      end;
+      select * into f from public.foods where id = fid for update;
+      if not found then
+        missing := missing || to_jsonb(item ->> 'id');
+        continue;
+      end if;
+      -- Start from the food as it is; only what the row has changes.
+      r := jsonb_populate_record(f, item - 'id' - 'created_by' - 'created_at' - 'status' - 'source'
+        - 'reviewed_by' - 'reviewed_at' - 'review_note' - 'label_photo_path' - 'photo_path');
+      r.kcal := coalesce(r.kcal, 0);
+      r.protein_g := coalesce(r.protein_g, 0);
+      r.carbs_g := coalesce(r.carbs_g, 0);
+      r.fat_g := coalesce(r.fat_g, 0);
+      execute format('update public.foods set %s where id = $2', num_set) using r, fid;
+      update public.foods set
+        name = coalesce(nullif(left(trim(item ->> 'name'), 200), ''), name),
+        brand = case when item ? 'brand' then nullif(trim(item ->> 'brand'), '') else brand end,
+        local_name = case when item ? 'local_name' then nullif(left(trim(item ->> 'local_name'), 200), '') else local_name end,
+        serving_label = coalesce(nullif(left(trim(item ->> 'serving_label'), 100), ''), serving_label),
+        barcode = case when item ? 'barcode' then code else barcode end,
+        photo_path = case
+          when (item ->> 'photo_path') like auth.uid()::text || '/%' then item ->> 'photo_path'
+          else photo_path
+        end
+      where id = fid;
+      updated := updated + 1;
+      continue;
+    end if;
+
+    -- ── Add a new food ──
+    nm := left(trim(coalesce(item ->> 'name', '')), 200);
+    continue when nm = '';
+    br := nullif(trim(coalesce(item ->> 'brand', '')), '');
+    if exists (
+      select 1 from public.foods x
+      where x.status in ('approved', 'pending')
+        and lower(x.name) = lower(nm)
+        and lower(coalesce(x.brand, '')) = lower(coalesce(br, ''))
+    ) then
+      skipped := skipped || to_jsonb(nm || coalesce(' (' || br || ')', ''));
+      continue;
+    end if;
+
     -- Nutrient columns come straight from the item; everything else is set here.
-    r := jsonb_populate_record(null::public.foods, item);
+    r := jsonb_populate_record(null::public.foods, item - 'id');
     r.id := gen_random_uuid();
     r.created_by := auth.uid();
     r.name := nm;
@@ -674,7 +725,7 @@ begin
     added := added + 1;
   end loop;
 
-  return jsonb_build_object('added', added, 'skipped', skipped);
+  return jsonb_build_object('added', added, 'updated', updated, 'skipped', skipped, 'missing', missing);
 end;
 $$;
 
