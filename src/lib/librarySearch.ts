@@ -56,7 +56,7 @@ export async function loadLibrary(
   return { q, filter, browse, foods, names, photos, total: null };
 }
 
-export type AddResult = Pick<Food, "id" | "name" | "brand" | "kcal" | "serving_label">;
+export type AddResult = Pick<Food, "id" | "name" | "local_name" | "brand" | "kcal" | "serving_label">;
 
 /** Foods you can log from the Add food search: approved ones plus your own. */
 export async function searchToLog(supabase: SupabaseClient, userId: string, rawQ: string): Promise<AddResult[]> {
@@ -65,7 +65,7 @@ export async function searchToLog(supabase: SupabaseClient, userId: string, rawQ
   const t = term(q);
   const { data } = await supabase
     .from("foods")
-    .select("id, name, brand, kcal, serving_label")
+    .select("id, name, local_name, brand, kcal, serving_label")
     .or(`status.eq.approved,created_by.eq.${userId}`)
     .neq("status", "rejected")
     .or(`name.ilike.${t},local_name.ilike.${t},brand.ilike.${t},barcode.ilike.${t}`)
