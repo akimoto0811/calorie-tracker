@@ -7,6 +7,7 @@ const TEXT_COLUMNS = [
   { key: "brand", header: "Brand", aliases: [] },
   { key: "serving_label", header: "Serving", aliases: ["serving size", "serving label", "portion"] },
   { key: "barcode", header: "Barcode", aliases: ["ean", "upc"] },
+  { key: "photo", header: "Photo", aliases: ["photo file", "image", "picture", "photo name", "image file"] },
 ] as const;
 type TextKey = (typeof TEXT_COLUMNS)[number]["key"];
 type ColumnKey = TextKey | NutrientKey;
@@ -19,6 +20,10 @@ export type ImportFood = {
   brand: string;
   serving_label: string;
   barcode: string;
+  /** File name of the product photo, matched to the photos picked on the page. */
+  photo: string;
+  /** Set after the photo is uploaded. */
+  photo_path?: string;
 } & Partial<Record<NutrientKey, number>>;
 
 export interface ImportRow {
@@ -162,12 +167,12 @@ export function parseFoods(text: string): ImportResult {
   const seen = new Map<string, number>();
   table.forEach((cells, idx) => {
     if (idx === 0) return;
-    const food: ImportFood = { name: "", local_name: "", brand: "", serving_label: "", barcode: "" };
+    const food: ImportFood = { name: "", local_name: "", brand: "", serving_label: "", barcode: "", photo: "" };
     const errors: string[] = [];
     columns.forEach((key, i) => {
       if (!key) return;
       const raw = (cells[i] ?? "").trim();
-      if (key === "name" || key === "local_name" || key === "brand" || key === "serving_label" || key === "barcode") {
+      if (key === "name" || key === "local_name" || key === "brand" || key === "serving_label" || key === "barcode" || key === "photo") {
         food[key] = raw;
         return;
       }
@@ -193,4 +198,27 @@ export function parseFoods(text: string): ImportResult {
     rows.push({ line: nonEmpty[idx].line, food, errors });
   });
   return { rows, unknownColumns };
+}
+
+/** "Greek Yogurt.JPG", "greek-yogurt.jpeg" and "greek_yogurt" all become "greekyogurt". */
+export function photoKey(fileName: string) {
+  return norm(fileName.replace(/\.[a-z0-9]{2,5}$/i, ""));
+}
+
+/**
+ * Finds each row's photo among the picked files: by the Photo column if filled in,
+ * otherwise a file named like the food (e.g. "Greek yogurt.jpg").
+ * Returns the file per row line, and the photo names in the sheet that weren't picked.
+ */
+export function matchPhotos(rows: ImportRow[], files: File[]) {
+  const byKey = new Map(files.map((f) => [photoKey(f.name), f]));
+  const matched = new Map<number, File>();
+  const missing = new Map<number, string>();
+  for (const r of rows) {
+    const wanted = r.food.photo.trim();
+    const file = wanted ? byKey.get(photoKey(wanted)) : byKey.get(photoKey(r.food.name));
+    if (file) matched.set(r.line, file);
+    else if (wanted) missing.set(r.line, wanted);
+  }
+  return { matched, missing };
 }

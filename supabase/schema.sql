@@ -602,6 +602,7 @@ grant execute on function public.update_food(uuid, jsonb, boolean) to authentica
 -- ───────────────────────────── Bulk upload ─────────────────────────────
 -- The app owner can add many foods at once from a spreadsheet. They go live straight away.
 -- A food with the same name and brand as one already in the library is skipped.
+-- Product photos are uploaded first by the app and passed in as photo_path.
 create or replace function public.import_foods(items jsonb)
 returns jsonb
 language plpgsql
@@ -656,7 +657,10 @@ begin
     r.barcode := code;
     r.source := 'manual';
     r.label_photo_path := null;
-    r.photo_path := null;
+    -- A photo must be one you uploaded (it sits in your own folder).
+    r.photo_path := case
+      when (item ->> 'photo_path') like auth.uid()::text || '/%' then item ->> 'photo_path'
+    end;
     r.status := 'approved';
     r.reviewed_by := auth.uid();
     r.reviewed_at := now();

@@ -320,7 +320,7 @@ export async function undoWater(input: { date: string }): Promise<Result> {
 export async function importFoods(
   foods: ImportFood[],
 ): Promise<{ ok: true; added: number; skipped: string[] } | { ok: false; error: string }> {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   if (!Array.isArray(foods) || foods.length === 0) return { ok: false, error: "No foods to add." };
   if (foods.length > 500) return { ok: false, error: "Send up to 500 foods at a time." };
   const items = foods.map((f) => {
@@ -331,6 +331,8 @@ export async function importFoods(
       brand: String(f.brand ?? "").trim().slice(0, 200),
       serving_label: String(f.serving_label ?? "").trim().slice(0, 100),
       barcode: cleanBarcode(f.barcode) || "",
+      // A photo must be one you uploaded (it sits in your own folder).
+      photo_path: f.photo_path && f.photo_path.startsWith(user.id + "/") ? f.photo_path : "",
       // Leave out empty nutrients so they stay blank.
       ...Object.fromEntries(Object.entries(nutrients).filter(([, v]) => v !== null)),
     };
