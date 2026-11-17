@@ -343,7 +343,7 @@ export async function importFoods(
     return {
       ok: false,
       error: missing
-        ? "The database needs an update first: re-run supabase/schema.sql in the Supabase SQL Editor."
+        ? `The database needs an update first: run the latest supabase/schema.sql from GitHub in the Supabase SQL Editor. (${error.message})`
         : error.message,
     };
   }
