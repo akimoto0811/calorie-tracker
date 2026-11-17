@@ -6,6 +6,7 @@ import type { Food } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { ChevronRight, Plus, Search } from "@/components/icons";
 import { deleteFood } from "../actions";
+import { LibrarySearch } from "./LibrarySearch";
 
 const SOURCE_LABEL = { manual: "Manual", label: "Label photo", barcode: "Barcode" } as const;
 const FILTERS = [
@@ -75,30 +76,35 @@ export default async function Library({
           )}
         </header>
 
-        <form action="/library" role="search">
-          <input type="hidden" name="f" value={filter} />
-          <div className="search">
-            <Search className="muted" />
-            <label htmlFor="lq" className="sr-only">
-              Search foods
-            </label>
-            <input id="lq" name="q" type="search" defaultValue={q} placeholder="Search foods, brands or barcodes" />
-          </div>
-        </form>
-
-        <nav className="chips" aria-label="Filter">
-          {FILTERS.map((f) => (
-            <Link
-              key={f.key}
-              href={link(f.key)}
-              className={f.key === filter ? "chip on" : "chip"}
-              aria-current={f.key === filter ? "true" : undefined}
-              replace
-            >
-              {f.label}
-            </Link>
-          ))}
-        </nav>
+        {/* Search and filters stay at the top while the list scrolls under them. */}
+        <div
+          className="stack"
+          style={{
+            gap: 12,
+            position: "sticky",
+            top: 0,
+            zIndex: 5,
+            background: "var(--bg)",
+            margin: "0 -20px",
+            padding: "10px 20px 12px",
+          }}
+        >
+          <LibrarySearch filter={filter} initial={q} />
+          <nav className="chips" aria-label="Filter">
+            {FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={link(f.key)}
+                className={f.key === filter ? "chip on" : "chip"}
+                aria-current={f.key === filter ? "true" : undefined}
+                replace
+                scroll={false}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
 
         {reviewCount > 0 && (
           <Link
