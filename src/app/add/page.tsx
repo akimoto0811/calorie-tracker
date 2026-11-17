@@ -74,7 +74,7 @@ export default async function AddFood({ searchParams }: { searchParams: AddSearc
           <div className="grow">
             <div style={{ fontWeight: 700, fontSize: 16 }}>Snap nutrition label</div>
             <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>
-              Take a photo and we read it for you
+              Take or upload a photo and we read it for you
             </div>
           </div>
           <ChevronRight size={18} className="muted" />
