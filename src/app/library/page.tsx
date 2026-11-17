@@ -52,11 +52,22 @@ export default async function Library({
   return (
     <>
       <main className="page" style={{ gap: 16 }}>
-        <header className="stack" style={{ gap: 4 }}>
-          <h1>Food library</h1>
-          <p className="muted" style={{ fontSize: 14 }}>
-            Foods added by you and your friends
-          </p>
+        <header style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div className="stack grow" style={{ gap: 4 }}>
+            <h1>Food library</h1>
+            <p className="muted" style={{ fontSize: 14 }}>
+              Foods added by you and your friends
+            </p>
+          </div>
+          {admin && (
+            <Link
+              href="/library/import"
+              className="btn btn-secondary"
+              style={{ width: "auto", height: 40, fontSize: 14, padding: "0 14px", flexShrink: 0, marginTop: 4 }}
+            >
+              Bulk upload
+            </Link>
+          )}
         </header>
 
         <form action="/library" role="search">

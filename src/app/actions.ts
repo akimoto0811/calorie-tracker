@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { DATE_RE } from "@/lib/dates";
 import { scale, num } from "@/lib/nutrition";
+import type { ImportFood } from "@/lib/foodImport";
 import type { Food, FoodDraft, Meal, NutrientKey, Nutrients } from "@/lib/types";
 import { ACTIVITIES, MEALS, NUTRIENT_KEYS } from "@/lib/types";
 
@@ -310,4 +311,43 @@ export async function undoWater(input: { date: string }): Promise<Result> {
   if (data?.[0]) await supabase.from("water_logs").delete().eq("id", data[0].id);
   revalidatePath("/");
   return { ok: true };
+}
+
+/**
+ * Bulk upload (app owner only): adds up to 500 foods straight to the library.
+ * Foods already in the library with the same name and brand are skipped.
+ */
+export async function importFoods(
+  foods: ImportFood[],
+): Promise<{ ok: true; added: number; skipped: string[] } | { ok: false; error: string }> {
+  const { supabase, user } = await requireUser();
+  if (!Array.isArray(foods) || foods.length === 0) return { ok: false, error: "No foods to add." };
+  if (foods.length > 500) return { ok: false, error: "Send up to 500 foods at a time." };
+  const items = foods.map((f) => {
+    const nutrients = cleanNutrients(f);
+    return {
+      name: String(f.name ?? "").trim().slice(0, 200),
+      local_name: String(f.local_name ?? "").trim().slice(0, 200),
+      brand: String(f.brand ?? "").trim().slice(0, 200),
+      serving_label: String(f.serving_label ?? "").trim().slice(0, 100),
+      barcode: cleanBarcode(f.barcode) || "",
+      // A photo must be one you uploaded (it sits in your own folder).
+      photo_path: f.photo_path && f.photo_path.startsWith(user.id + "/") ? f.photo_path : "",
+      // Leave out empty nutrients so they stay blank.
+      ...Object.fromEntries(Object.entries(nutrients).filter(([, v]) => v !== null)),
+    };
+  });
+  const { data, error } = await supabase.rpc("import_foods", { items });
+  if (error) {
+    const missing = /import_foods/.test(error.message) && /(not find|does not exist)/i.test(error.message);
+    return {
+      ok: false,
+      error: missing
+        ? "The database needs an update first: re-run supabase/schema.sql in the Supabase SQL Editor."
+        : error.message,
+    };
+  }
+  revalidatePath("/", "layout");
+  const res = (data ?? {}) as { added?: number; skipped?: string[] };
+  return { ok: true, added: res.added ?? 0, skipped: res.skipped ?? [] };
 }
