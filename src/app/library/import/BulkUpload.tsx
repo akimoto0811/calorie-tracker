@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { foodsByIds, importFoods } from "@/app/actions";
+import { photoFromUrl } from "@/app/photoUrl";
 import { matchPhotos, parseFoods, planRow, templateCsv, type ImportFood, type ImportResult } from "@/lib/foodImport";
 import type { Food } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
@@ -50,16 +51,50 @@ async function uploadPhotos(files: Map<number, File>, onProgress: (done: number)
   return paths;
 }
 
+/** Downloads each photo link on the server, a few at a time. A link that fails just leaves that food without a photo. */
+async function downloadPhotos(
+  links: Map<number, string>,
+  names: Map<number, string>,
+  onProgress: (done: number) => void,
+) {
+  const paths = new Map<number, string>();
+  const failed: string[] = [];
+  const queue = [...links.entries()];
+  let done = 0;
+  async function worker() {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      const [line, link] = next;
+      let r: Awaited<ReturnType<typeof photoFromUrl>>;
+      try {
+        r = await photoFromUrl(link);
+      } catch {
+        r = { ok: false, error: "couldn't be downloaded" };
+      }
+      if (r.ok) paths.set(line, r.path);
+      else failed.push(`Row ${line} (${names.get(line) ?? ""}): the photo link ${r.error}`);
+      onProgress(++done);
+    }
+  }
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return { paths, failed };
+}
+
 export function BulkUpload() {
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ImportResult | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
-  const [saving, setSaving] = useState<{ what: "photos" | "foods"; done: number; total: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ added: number; updated: number; skipped: string[]; missing: string[] } | null>(
+  const [saving, setSaving] = useState<{ what: "photos" | "links" | "foods"; done: number; total: number } | null>(
     null,
   );
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{
+    added: number;
+    updated: number;
+    skipped: string[];
+    missing: string[];
+    photoFailed: string[];
+  } | null>(null);
   // The library's current version of rows that have an ID, to show what will change.
   const [existing, setExisting] = useState<Map<string, Food> | null>(null);
 
@@ -110,7 +145,7 @@ export function BulkUpload() {
   }
 
   const valid = useMemo(() => parsed?.rows.filter((r) => r.errors.length === 0) ?? [], [parsed]);
-  const { matched, missing } = useMemo(() => matchPhotos(valid, photos), [valid, photos]);
+  const { matched, links, missing } = useMemo(() => matchPhotos(valid, photos), [valid, photos]);
   // What each row will do: new food, change a food, or nothing.
   const plans = useMemo(() => {
     const m = new Map<number, ReturnType<typeof planRow>>();
@@ -122,12 +157,12 @@ export function BulkUpload() {
           r.food,
           existing.get(r.food.id.toLowerCase()) ?? existing.get(r.food.id),
           parsed.columns,
-          matched.has(r.line),
+          matched.has(r.line) || links.has(r.line),
         ),
       );
     }
     return m;
-  }, [parsed, existing, valid, matched]);
+  }, [parsed, existing, valid, matched, links]);
   const good = useMemo(
     () => valid.filter((r) => ["new", "update"].includes(plans.get(r.line)?.kind ?? "")),
     [valid, plans],
@@ -150,6 +185,7 @@ export function BulkUpload() {
     return m;
   }, [good, matched]);
   useEffect(() => () => thumbs.forEach((u) => URL.revokeObjectURL(u)), [thumbs]);
+  const linkCount = good.filter((r) => links.has(r.line)).length;
   const unusedPhotos = photos.length - new Set(matched.values()).size;
 
   async function save() {
@@ -164,6 +200,17 @@ export function BulkUpload() {
         setError((e as Error).message + " Nothing was added yet. Try again.");
         return;
       }
+    }
+    const wantLinks = new Map(good.filter((r) => links.has(r.line)).map((r) => [r.line, links.get(r.line)!]));
+    let photoFailed: string[] = [];
+    if (wantLinks.size > 0) {
+      setSaving({ what: "links", done: 0, total: wantLinks.size });
+      const names = new Map(good.map((r) => [r.line, r.food.name]));
+      const got = await downloadPhotos(wantLinks, names, (n) =>
+        setSaving({ what: "links", done: n, total: wantLinks.size }),
+      );
+      got.paths.forEach((v, k) => paths.set(k, v));
+      photoFailed = got.failed;
     }
     const foods: ImportFood[] = good.map((r) => ({ ...r.food, photo_path: paths.get(r.line) }));
     setSaving({ what: "foods", done: 0, total: foods.length });
@@ -194,7 +241,7 @@ export function BulkUpload() {
     setPaste("");
     setPhotos([]);
     setExisting(null);
-    setDone({ added, updated, skipped, missing: gone });
+    setDone({ added, updated, skipped, missing: gone, photoFailed });
   }
 
   if (done) {
@@ -213,6 +260,20 @@ export function BulkUpload() {
           <div className="notice warn">
             {done.missing.length} {done.missing.length === 1 ? "row was" : "rows were"} skipped because their ID
             isn&apos;t in the library any more.
+          </div>
+        )}
+        {done.photoFailed.length > 0 && (
+          <div className="notice warn">
+            <div>
+              {done.photoFailed.length === 1 ? "1 photo" : `${done.photoFailed.length} photos`} couldn&apos;t be
+              downloaded, so {done.photoFailed.length === 1 ? "that food was" : "those foods were"} saved without one:
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                {done.photoFailed.slice(0, 20).map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              {done.photoFailed.length > 20 ? `and ${done.photoFailed.length - 20} more.` : ""}
+            </div>
           </div>
         )}
         {done.skipped.length > 0 && (
@@ -273,8 +334,8 @@ export function BulkUpload() {
         </div>
         <p className="muted small">
           Keep the first row (the column names) as it is. You can delete columns you don&apos;t need. For a product
-          photo, write the photo&apos;s file name in the Photo column (e.g. yogurt.jpg), or name the photo the same as
-          the food (e.g. Greek yogurt.jpg) and leave the column empty.
+          photo, put a link to the picture in the Photo column (e.g. https://…/yogurt.jpg) and the app downloads it.
+          Or write a photo&apos;s file name there (e.g. yogurt.jpg) and choose the photos below.
         </p>
       </section>
 
@@ -352,6 +413,7 @@ export function BulkUpload() {
                 {unchanged > 0 && <span className="tag">{unchanged} unchanged</span>}
                 {bad.length > 0 && <span className="tag warn">{bad.length} need fixing</span>}
                 {matched.size > 0 && <span className="tag">{matched.size} with photo</span>}
+                {linkCount > 0 && <span className="tag">{linkCount} photo links</span>}
               </div>
 
               {(missing.size > 0 || (photos.length > 0 && unusedPhotos > 0)) && (
@@ -400,9 +462,15 @@ export function BulkUpload() {
                   <ul className="list" style={{ margin: 0, padding: 0, listStyle: "none" }}>
                     {good.slice(0, PREVIEW_LIMIT).map((r) => (
                       <li key={r.line} className="row">
-                        {thumbs.get(r.line) && (
+                        {(thumbs.get(r.line) ?? links.get(r.line)) && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={thumbs.get(r.line)} alt="" className="food-thumb" />
+                          <img
+                            src={thumbs.get(r.line) ?? links.get(r.line)}
+                            alt=""
+                            className="food-thumb"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+                          />
                         )}
                         <div className="grow" style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{r.food.name}</div>
@@ -475,7 +543,7 @@ export function BulkUpload() {
                 >
                   {saving ? (
                     <>
-                      <span className="spinner" /> {saving.what === "photos" ? "Uploading photos" : "Saving"}{" "}
+                      <span className="spinner" /> {saving.what === "photos" ? "Uploading photos" : saving.what === "links" ? "Downloading photos" : "Saving"}{" "}
                       {saving.done}/{saving.total}…
                     </>
                   ) : good.length === 0 ? (
