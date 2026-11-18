@@ -258,22 +258,32 @@ export function photoKey(fileName: string) {
   return norm(fileName.replace(/\.[a-z0-9]{2,5}$/i, ""));
 }
 
+/** A Photo cell that is a web link rather than a file name. */
+export function isPhotoUrl(v: string) {
+  return /^https?:\/\/\S+$/i.test(v.trim());
+}
+
 /**
- * Finds each row's photo among the picked files: by the Photo column if filled in,
- * otherwise a file named like the food (e.g. "Greek yogurt.jpg").
- * Returns the file per row line, and the photo names in the sheet that weren't picked.
+ * Finds each row's photo: a web link in the Photo column, or one of the picked files
+ * (named in the Photo column, otherwise a file named like the food, e.g. "Greek yogurt.jpg").
+ * Returns the file or link per row line, and the photo names in the sheet that weren't picked.
  */
 export function matchPhotos(rows: ImportRow[], files: File[]) {
   const byKey = new Map(files.map((f) => [photoKey(f.name), f]));
   const matched = new Map<number, File>();
+  const links = new Map<number, string>();
   const missing = new Map<number, string>();
   for (const r of rows) {
     const wanted = r.food.photo.trim();
+    if (isPhotoUrl(wanted)) {
+      links.set(r.line, wanted);
+      continue;
+    }
     const file = wanted ? byKey.get(photoKey(wanted)) : byKey.get(photoKey(r.food.name));
     if (file) matched.set(r.line, file);
     else if (wanted) missing.set(r.line, wanted);
   }
-  return { matched, missing };
+  return { matched, links, missing };
 }
 
 const FIELD_LABEL: Record<string, string> = {
