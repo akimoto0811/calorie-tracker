@@ -16,7 +16,7 @@ export default async function ImportFoods() {
           <div className="muted small">Add many foods to the library from a spreadsheet</div>
         </div>
       </header>
-      <BulkUpload />
+      <BulkUpload remotePhotosEnabled={process.env.ENABLE_REMOTE_PHOTO_IMPORT === "true"} />
     </main>
   );
 }

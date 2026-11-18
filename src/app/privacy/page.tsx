@@ -23,11 +23,11 @@ export default function Privacy() {
         </li>
         <li>
           <b>Foods you share:</b> if you tick &ldquo;Share with the food library&rdquo;, that food (name, brand,
-          nutrition values and any label photo) becomes visible to other members, along with your display name.
+          nutrition values and any photos) becomes visible to other members, along with your display name.
         </li>
         <li>
-          <b>Label photos:</b> photos you take of nutrition labels are stored so the food can be checked. They are
-          visible to signed-in members only.
+          <b>Food and label photos:</b> photos you upload stay visible only to you until you attach them to a
+          food you submit to the shared library.
         </li>
         <li>
           <b>Invites:</b> email addresses that members invite, so those people can sign up.

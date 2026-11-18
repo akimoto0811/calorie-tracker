@@ -26,12 +26,15 @@ function download(kind: "basic" | "full") {
 }
 
 /** Uploads each photo (shrunk, a few at a time) and returns its storage path per row line. */
-async function uploadPhotos(files: Map<number, File>, onProgress: (done: number) => void) {
+async function uploadPhotos(
+  files: Map<number, File>,
+  paths: Map<number, string>,
+  onProgress: (done: number) => void,
+) {
   const supabase = createClient();
   const { data } = await supabase.auth.getSession();
   const uid = data.session?.user.id;
   if (!uid) throw new Error("Please sign in again.");
-  const paths = new Map<number, string>();
   const queue = [...files.entries()];
   let done = 0;
   async function worker() {
@@ -47,8 +50,10 @@ async function uploadPhotos(files: Map<number, File>, onProgress: (done: number)
       onProgress(++done);
     }
   }
-  await Promise.all([worker(), worker(), worker(), worker()]);
-  return paths;
+  const results = await Promise.allSettled([worker(), worker(), worker(), worker()]);
+  for (const result of results) {
+    if (result.status === "rejected") throw result.reason;
+  }
 }
 
 /** Downloads each photo link on the server, a few at a time. A link that fails just leaves that food without a photo. */
@@ -79,7 +84,23 @@ async function downloadPhotos(
   return { paths, failed };
 }
 
-export function BulkUpload() {
+async function removeUnusedPhotos(paths: Iterable<string>) {
+  const keys = [...new Set(paths)];
+  if (!keys.length) return true;
+  const bucket = createClient().storage.from("label-photos");
+  let cleaned = true;
+  for (let i = 0; i < keys.length; i += 100) {
+    try {
+      const { error } = await bucket.remove(keys.slice(i, i + 100));
+      if (error) cleaned = false;
+    } catch {
+      cleaned = false;
+    }
+  }
+  return cleaned;
+}
+
+export function BulkUpload({ remotePhotosEnabled }: { remotePhotosEnabled: boolean }) {
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ImportResult | null>(null);
@@ -94,6 +115,7 @@ export function BulkUpload() {
     skipped: string[];
     missing: string[];
     photoFailed: string[];
+    cleanupFailed: boolean;
   } | null>(null);
   // The library's current version of rows that have an ID, to show what will change.
   const [existing, setExisting] = useState<Map<string, Food> | null>(null);
@@ -157,12 +179,12 @@ export function BulkUpload() {
           r.food,
           existing.get(r.food.id.toLowerCase()) ?? existing.get(r.food.id),
           parsed.columns,
-          matched.has(r.line) || links.has(r.line),
+          matched.has(r.line) || (remotePhotosEnabled && links.has(r.line)),
         ),
       );
     }
     return m;
-  }, [parsed, existing, valid, matched, links]);
+  }, [parsed, existing, valid, matched, links, remotePhotosEnabled]);
   const good = useMemo(
     () => valid.filter((r) => ["new", "update"].includes(plans.get(r.line)?.kind ?? "")),
     [valid, plans],
@@ -190,50 +212,84 @@ export function BulkUpload() {
 
   async function save() {
     setError(null);
-    let paths = new Map<number, string>();
-    if (matched.size > 0) {
-      setSaving({ what: "photos", done: 0, total: matched.size });
+    const paths = new Map<number, string>();
+    const localPhotos = new Map(good.flatMap((r) => {
+      const file = matched.get(r.line);
+      return file ? [[r.line, file] as const] : [];
+    }));
+    if (localPhotos.size > 0) {
+      setSaving({ what: "photos", done: 0, total: localPhotos.size });
       try {
-        paths = await uploadPhotos(matched, (n) => setSaving({ what: "photos", done: n, total: matched.size }));
-      } catch (e) {
+        await uploadPhotos(localPhotos, paths, (done) => setSaving({ what: "photos", done, total: localPhotos.size }));
+      } catch (error) {
+        const cleaned = await removeUnusedPhotos(paths.values());
         setSaving(null);
-        setError((e as Error).message + " Nothing was added yet. Try again.");
+        setError((error as Error).message + (cleaned ? " No foods were saved." : " Some unused uploads could not be removed."));
         return;
       }
     }
-    const wantLinks = new Map(good.filter((r) => links.has(r.line)).map((r) => [r.line, links.get(r.line)!]));
+
+    const wantLinks = new Map(good.filter((r) => remotePhotosEnabled && links.has(r.line)).map((r) => [r.line, links.get(r.line)!]));
     let photoFailed: string[] = [];
     if (wantLinks.size > 0) {
       setSaving({ what: "links", done: 0, total: wantLinks.size });
       const names = new Map(good.map((r) => [r.line, r.food.name]));
-      const got = await downloadPhotos(wantLinks, names, (n) =>
-        setSaving({ what: "links", done: n, total: wantLinks.size }),
+      const got = await downloadPhotos(wantLinks, names, (done) =>
+        setSaving({ what: "links", done, total: wantLinks.size }),
       );
-      got.paths.forEach((v, k) => paths.set(k, v));
+      got.paths.forEach((path, line) => paths.set(line, path));
       photoFailed = got.failed;
     }
+
     const foods: ImportFood[] = good.map((r) => ({ ...r.food, photo_path: paths.get(r.line) }));
+    const unused = new Set(paths.values());
+    const uploaded = new Set(paths.values());
     setSaving({ what: "foods", done: 0, total: foods.length });
     let added = 0;
     let updated = 0;
     const skipped: string[] = [];
     const gone: string[] = [];
+    let importError: string | undefined;
     for (let i = 0; i < foods.length; i += CHUNK) {
-      const res = await importFoods(foods.slice(i, i + CHUNK), parsed?.columns ?? []);
-      if (!res.ok) {
-        setSaving(null);
-        setError(
-          added + updated > 0
-            ? `${added + updated} foods were saved, then this went wrong: ${res.error} Upload the same file again to finish; foods already saved are skipped or unchanged.`
-            : res.error,
-        );
-        return;
+      const batch = foods.slice(i, i + CHUNK);
+      // If the response is lost, the batch may have committed. Keep its photos unless rollback is confirmed.
+      for (const food of batch) {
+        if (food.photo_path) unused.delete(food.photo_path);
       }
-      added += res.added;
-      updated += res.updated;
-      skipped.push(...res.skipped);
-      gone.push(...res.missing);
-      setSaving({ what: "foods", done: Math.min(i + CHUNK, foods.length), total: foods.length });
+      try {
+        const res = await importFoods(batch, parsed?.columns ?? []);
+        if (!res.ok) {
+          if (res.rolledBack) {
+            for (const food of batch) {
+              if (food.photo_path) unused.add(food.photo_path);
+            }
+          }
+          importError = res.error;
+          break;
+        }
+        for (const path of res.unusedPhotos) {
+          if (uploaded.has(path)) unused.add(path);
+        }
+        added += res.added;
+        updated += res.updated;
+        skipped.push(...res.skipped);
+        gone.push(...res.missing);
+        setSaving({ what: "foods", done: Math.min(i + CHUNK, foods.length), total: foods.length });
+      } catch {
+        importError = "The import was interrupted. Check the library before retrying.";
+        break;
+      }
+    }
+    const cleaned = await removeUnusedPhotos(unused);
+    if (importError) {
+      setSaving(null);
+      const saved = added + updated;
+      setError(
+        (saved ? `${saved} foods were saved before the import stopped. ` : "") +
+        importError +
+        (cleaned ? "" : " Some unused uploads could not be removed."),
+      );
+      return;
     }
     setSaving(null);
     setParsed(null);
@@ -241,7 +297,7 @@ export function BulkUpload() {
     setPaste("");
     setPhotos([]);
     setExisting(null);
-    setDone({ added, updated, skipped, missing: gone, photoFailed });
+    setDone({ added, updated, skipped, missing: gone, photoFailed, cleanupFailed: !cleaned });
   }
 
   if (done) {
@@ -262,11 +318,11 @@ export function BulkUpload() {
             isn&apos;t in the library any more.
           </div>
         )}
+        {done.cleanupFailed && <div className="notice warn">Some unused uploads could not be removed.</div>}
         {done.photoFailed.length > 0 && (
           <div className="notice warn">
             <div>
-              {done.photoFailed.length === 1 ? "1 photo" : `${done.photoFailed.length} photos`} couldn&apos;t be
-              downloaded, so {done.photoFailed.length === 1 ? "that food was" : "those foods were"} saved without one:
+              {done.photoFailed.length === 1 ? "1 photo" : `${done.photoFailed.length} photos`} couldn&apos;t be downloaded. Existing photos were kept:
               <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
                 {done.photoFailed.slice(0, 20).map((f) => (
                   <li key={f}>{f}</li>
@@ -333,9 +389,9 @@ export function BulkUpload() {
           </a>
         </div>
         <p className="muted small">
-          Keep the first row (the column names) as it is. You can delete columns you don&apos;t need. For a product
-          photo, put a link to the picture in the Photo column (e.g. https://…/yogurt.jpg) and the app downloads it.
-          Or write a photo&apos;s file name there (e.g. yogurt.jpg) and choose the photos below.
+          Keep the first row (the column names) as it is. For a product photo, write its file name in the
+          Photo column (e.g. yogurt.jpg) and choose the photo below.
+          {remotePhotosEnabled ? " You can also paste a link to the picture in the Photo column." : " Photo links are paused."}
         </p>
       </section>
 
@@ -413,7 +469,8 @@ export function BulkUpload() {
                 {unchanged > 0 && <span className="tag">{unchanged} unchanged</span>}
                 {bad.length > 0 && <span className="tag warn">{bad.length} need fixing</span>}
                 {matched.size > 0 && <span className="tag">{matched.size} with photo</span>}
-                {linkCount > 0 && <span className="tag">{linkCount} photo links</span>}
+                {links.size > 0 && !remotePhotosEnabled && <span className="tag warn">Photo links will be skipped</span>}
+                {remotePhotosEnabled && linkCount > 0 && <span className="tag">{linkCount} photo links</span>}
               </div>
 
               {(missing.size > 0 || (photos.length > 0 && unusedPhotos > 0)) && (
@@ -462,10 +519,10 @@ export function BulkUpload() {
                   <ul className="list" style={{ margin: 0, padding: 0, listStyle: "none" }}>
                     {good.slice(0, PREVIEW_LIMIT).map((r) => (
                       <li key={r.line} className="row">
-                        {(thumbs.get(r.line) ?? links.get(r.line)) && (
+                        {thumbs.get(r.line) && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={thumbs.get(r.line) ?? links.get(r.line)}
+                            src={thumbs.get(r.line)}
                             alt=""
                             className="food-thumb"
                             referrerPolicy="no-referrer"

@@ -100,20 +100,16 @@ export async function createFoodAndLog(input: {
 
   const r = foodRow(user.id, draft, share);
   if (!r.ok) return r;
-  const row = r.row;
-
-  const { data: food, error } = await supabase.from("foods").insert(row).select().single();
-  if (error || !food) return { ok: false, error: error?.message ?? "Could not save the food." };
-
-  const { error: logError } = await supabase.from("food_logs").insert({
-    user_id: user.id,
-    food_id: food.id,
-    logged_on: date,
-    meal,
-    servings,
-    ...snapshot(food as Food, servings),
+  const { error } = await supabase.rpc("create_food_and_log", {
+    food: r.row,
+    log_entry: {
+      logged_on: date,
+      meal,
+      servings,
+      ...snapshot(r.row, servings),
+    },
   });
-  if (logError) return { ok: false, error: logError.message };
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -353,7 +349,8 @@ export async function importFoods(
   /** The sheet's columns. On an update, only these change; anything not in the sheet is kept. */
   columns: string[],
 ): Promise<
-  { ok: true; added: number; updated: number; skipped: string[]; missing: string[] } | { ok: false; error: string }
+  | { ok: true; added: number; updated: number; skipped: string[]; missing: string[]; unusedPhotos: string[] }
+  | { ok: false; error: string; rolledBack?: boolean }
 > {
   const { supabase, user } = await requireUser();
   if (!Array.isArray(foods) || foods.length === 0) return { ok: false, error: "No foods to add." };
@@ -394,19 +391,21 @@ export async function importFoods(
     const missing = /import_foods/.test(error.message) && /(not find|does not exist)/i.test(error.message);
     return {
       ok: false,
+      rolledBack: /^(22|23|40|42|P0)[0-9A-Z]{3}$/.test(error.code),
       error: missing
         ? `The database needs an update first: run the latest supabase/schema.sql from GitHub in the Supabase SQL Editor. (${error.message})`
         : error.message,
     };
   }
   revalidatePath("/", "layout");
-  const res = (data ?? {}) as { added?: number; updated?: number; skipped?: string[]; missing?: string[] };
+  const res = (data ?? {}) as { added?: number; updated?: number; skipped?: string[]; missing?: string[]; unused_photos?: string[] };
   return {
     ok: true,
     added: res.added ?? 0,
     updated: res.updated ?? 0,
     skipped: res.skipped ?? [],
     missing: res.missing ?? [],
+    unusedPhotos: res.unused_photos ?? [],
   };
 }
 
