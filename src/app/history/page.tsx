@@ -20,16 +20,23 @@ export default async function History({ searchParams }: { searchParams: Promise<
   const end = await today();
   const start = addDays(end, -(range.days - 1));
 
-  const [profile, reviewCount, { data }] = await Promise.all([
+  const [profile, reviewCount, { data, error }] = await Promise.all([
     getMyProfile(supabase, user.id),
     getReviewCount(supabase, user.id),
-    supabase
-      .from("food_logs")
-      .select("logged_on, kcal, protein_g, carbs_g, fat_g")
-      .gte("logged_on", start)
-      .lte("logged_on", end)
-      .limit(10000),
+    supabase.rpc("food_history_totals", { start_day: start, end_day: end }),
   ]);
+
+  if (error) {
+    return (
+      <>
+        <main className="page">
+          <h1>History</h1>
+          <p className="notice error" role="alert">Couldn&apos;t load your nutrition history. Please try again.</p>
+        </main>
+        <BottomNav active="history" reviewCount={reviewCount} />
+      </>
+    );
+  }
 
   const byDate = new Map<string, Day>(
     dateRange(start, end).map((d) => [d, { date: d, kcal: 0, protein: 0, carbs: 0, fat: 0, entries: 0 }]),
@@ -37,11 +44,11 @@ export default async function History({ searchParams }: { searchParams: Promise<
   for (const r of data ?? []) {
     const d = byDate.get(r.logged_on);
     if (!d) continue;
-    d.kcal += Number(r.kcal);
-    d.protein += Number(r.protein_g);
-    d.carbs += Number(r.carbs_g);
-    d.fat += Number(r.fat_g);
-    d.entries += 1;
+    d.kcal = Number(r.kcal);
+    d.protein = Number(r.protein_g);
+    d.carbs = Number(r.carbs_g);
+    d.fat = Number(r.fat_g);
+    d.entries = Number(r.entries);
   }
   const days = [...byDate.values()];
   const goal = profile.kcal_goal;

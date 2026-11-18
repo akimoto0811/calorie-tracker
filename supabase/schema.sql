@@ -133,6 +133,8 @@ create index if not exists foods_barcode_idx on public.foods (barcode);
 alter table public.foods add column if not exists photo_path text;
 -- Added later: the food's name in its original language, e.g. 고래밥 (the main name stays in English).
 alter table public.foods add column if not exists local_name text;
+create index if not exists foods_photo_path_idx on public.foods (photo_path) where photo_path is not null;
+create index if not exists foods_label_photo_path_idx on public.foods (label_photo_path) where label_photo_path is not null;
 create index if not exists foods_created_by_idx on public.foods (created_by);
 
 -- ───────────────────────────── Food log ─────────────────────────────
@@ -403,6 +405,8 @@ create policy "add own foods" on public.foods
     created_by = auth.uid()
     and status in ('private', 'pending')
     and reviewed_by is null
+    and (photo_path is null or (storage.foldername(photo_path))[1] = auth.uid()::text)
+    and (label_photo_path is null or (storage.foldername(label_photo_path))[1] = auth.uid()::text)
   );
 
 -- You can edit your own foods until they are approved. Editing never approves.
@@ -410,7 +414,13 @@ drop policy if exists "edit own unapproved foods" on public.foods;
 create policy "edit own unapproved foods" on public.foods
   for update to authenticated
   using (created_by = auth.uid() and status <> 'approved')
-  with check (created_by = auth.uid() and status in ('private', 'pending') and reviewed_by is null);
+  with check (
+    created_by = auth.uid()
+    and status in ('private', 'pending')
+    and reviewed_by is null
+    and (photo_path is null or (storage.foldername(photo_path))[1] = auth.uid()::text)
+    and (label_photo_path is null or (storage.foldername(label_photo_path))[1] = auth.uid()::text)
+  );
 
 drop policy if exists "delete own unapproved foods" on public.foods;
 create policy "delete own unapproved foods" on public.foods
@@ -430,6 +440,57 @@ create policy "own water" on public.water_logs
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- Save a new food and its nutrition snapshot in one transaction under the caller's RLS policies.
+create or replace function public.create_food_and_log(food jsonb, log_entry jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  new_food public.foods;
+  new_log public.food_logs;
+begin
+  new_food := jsonb_populate_record(null::public.foods, food);
+  new_food.id := gen_random_uuid();
+  new_food.created_by := auth.uid();
+  new_food.created_at := now();
+  new_food.reviewed_by := null;
+  new_food.reviewed_at := null;
+  new_food.review_note := null;
+
+  new_log := jsonb_populate_record(null::public.food_logs, log_entry);
+  new_log.id := gen_random_uuid();
+  new_log.user_id := auth.uid();
+  new_log.food_id := new_food.id;
+  new_log.created_at := now();
+
+  insert into public.foods select new_food.*;
+  insert into public.food_logs select new_log.*;
+end;
+$$;
+
+revoke all on function public.create_food_and_log(jsonb, jsonb) from public, anon;
+grant execute on function public.create_food_and_log(jsonb, jsonb) to authenticated;
+
+-- Return one row per day so the API row limit does not truncate individual food entries.
+create or replace function public.food_history_totals(start_day date, end_day date)
+returns table (logged_on date, kcal numeric, protein_g numeric, carbs_g numeric, fat_g numeric, entries bigint)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select l.logged_on, sum(l.kcal), sum(l.protein_g), sum(l.carbs_g), sum(l.fat_g), count(*)
+  from public.food_logs l
+  where l.user_id = auth.uid() and l.logged_on between start_day and end_day
+  group by l.logged_on
+  order by l.logged_on;
+$$;
+
+revoke all on function public.food_history_totals(date, date) from public, anon;
+grant execute on function public.food_history_totals(date, date) to authenticated;
 
 -- ───────────────────────────── Review ─────────────────────────────
 -- Approve or reject a pending food. Only someone other than the creator may do this.
@@ -725,7 +786,19 @@ begin
     added := added + 1;
   end loop;
 
-  return jsonb_build_object('added', added, 'updated', updated, 'skipped', skipped, 'missing', missing);
+  return jsonb_build_object(
+    'added', added, 'updated', updated, 'skipped', skipped, 'missing', missing,
+    'unused_photos', (
+      select coalesce(jsonb_agg(distinct candidate.path), '[]'::jsonb)
+      from jsonb_array_elements(items) as entry(item)
+      cross join lateral (select entry.item ->> 'photo_path' as path) as candidate
+      where candidate.path like auth.uid()::text || '/%'
+        and not exists (
+          select 1 from public.foods x
+          where x.photo_path = candidate.path or x.label_photo_path = candidate.path
+        )
+    )
+  );
 end;
 $$;
 
@@ -746,11 +819,23 @@ create policy "upload own label photos" on storage.objects
   for insert to authenticated
   with check (bucket_id = 'label-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- Members can view label photos (reviewers need to check them against the numbers).
+-- Uploaders can see their own photos, including uploads that are not yet attached to a food.
+-- Other members can see product and label photos attached to shared foods.
 drop policy if exists "members view label photos" on storage.objects;
-create policy "members view label photos" on storage.objects
+drop policy if exists "read own or shared food photos" on storage.objects;
+create policy "read own or shared food photos" on storage.objects
   for select to authenticated
-  using (bucket_id = 'label-photos');
+  using (
+    bucket_id = 'label-photos'
+    and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (
+        select 1 from public.foods f
+        where f.status in ('approved', 'pending')
+          and (f.photo_path = objects.name or f.label_photo_path = objects.name)
+      )
+    )
+  );
 
 drop policy if exists "delete own label photos" on storage.objects;
 create policy "delete own label photos" on storage.objects
